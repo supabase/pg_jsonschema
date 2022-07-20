@@ -1,5 +1,5 @@
-comment = 'pg_json_schema'
+comment = 'pg_jsonschema'
 default_version = '@CARGO_VERSION@'
-module_pathname = '$libdir/pg_json_schema'
+module_pathname = '$libdir/pg_jsonschema'
 relocatable = false
 superuser = false
