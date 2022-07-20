@@ -12,42 +12,89 @@ fn jsonb_matches_schema(schema: Json, instance: JsonB) -> bool {
     jsonschema::is_valid(&schema.0, &instance.0)
 }
 
-#[cfg(any(test, feature = "pg_test"))]
 #[pg_schema]
+#[cfg(any(test, feature = "pg_test"))]
 mod tests {
     use pgx::*;
     use serde_json::json;
 
     #[pg_test]
     fn test_json_matches_schema_rs() {
-        // Test from Rust
+        let max_length: i32 = 5;
         assert!(crate::json_matches_schema(
-            Json(json!({"maxLength": 5})),
+            Json(json!({ "maxLength": max_length })),
             Json(json!("foo")),
         ));
     }
 
     #[pg_test]
-    fn test_jsonb_matches_schema_spi() {
-        // Test from SQL
-        let result = Spi::get_one::<bool>(
-            r#"
-            select jsonb_matches_schema('{"maxLength": 5}', '"foo"')
-        "#,
-        )
-        .expect("error?");
-        assert!(result);
+    fn test_json_not_matches_schema_rs() {
+        let max_length: i32 = 5;
+        assert!(!crate::json_matches_schema(
+            Json(json!({ "maxLength": max_length })),
+            Json(json!("foobar")),
+        ));
     }
 
     #[pg_test]
-    fn test_json_matches_schema_spi_fail_wrong_type() {
-        // Test from SQL
+    fn test_jsonb_matches_schema_rs() {
+        let max_length: i32 = 5;
+        assert!(crate::jsonb_matches_schema(
+            Json(json!({ "maxLength": max_length })),
+            JsonB(json!("foo")),
+        ));
+    }
+
+    #[pg_test]
+    fn test_jsonb_not_matches_schema_rs() {
+        let max_length: i32 = 5;
+        assert!(!crate::jsonb_matches_schema(
+            Json(json!({ "maxLength": max_length })),
+            JsonB(json!("foobar")),
+        ));
+    }
+
+    #[pg_test]
+    fn test_json_matches_schema_spi() {
+        let result = Spi::get_one::<bool>(
+            r#"
+            select json_matches_schema('{"type": "object"}', '{}')
+        "#,
+        )
+        .unwrap();
+        assert_eq!(result, false);
+    }
+
+    #[pg_test]
+    fn test_json_not_matches_schema_spi() {
         let result = Spi::get_one::<bool>(
             r#"
             select json_matches_schema('{"type": "object"}', '1')
         "#,
         )
-        .expect("error?");
+        .unwrap();
+        assert_eq!(result, false);
+    }
+
+    #[pg_test]
+    fn test_jsonb_matches_schema_spi() {
+        let result = Spi::get_one::<bool>(
+            r#"
+            select json_matches_schema('{"type": "object"}', '{}')
+        "#,
+        )
+        .unwrap();
+        assert_eq!(result, false);
+    }
+
+    #[pg_test]
+    fn test_jsonb_not_matches_schema_spi() {
+        let result = Spi::get_one::<bool>(
+            r#"
+            select json_matches_schema('{"type": "object"}', '1')
+        "#,
+        )
+        .unwrap();
         assert_eq!(result, false);
     }
 }
