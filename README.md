@@ -75,7 +75,6 @@ values ('{"tags": [1, 3]}');
 --   DETAIL:  Failing row contains (2, {"tags": [1, 3]}).
 ```
 
-
 ## Installation
 
 Requires:
@@ -107,3 +106,48 @@ for more complete installation guidelines see the [pgx](https://github.com/tcdi/
 ## Prior Art
 
 [postgres-json-schema](https://github.com/gavinwahl/postgres-json-schema) - an implementation of JSON Schema for Postgres written in PL/pgSQL
+
+
+## Benchmark
+
+
+#### System
+- 2021 MacBook Pro M1 Max (32GB)
+- macOS 12.4
+- PostgreSQL 14.1
+
+### Setup
+Validating the following schema on 20k unique inserts
+
+```json
+{
+    "type": "object",
+    "properties": {
+        "a": {"type": "number"},
+        "b": {"type": "string"}
+    }
+}
+```
+
+```sql
+create table bench_test_pg_jsonschema(
+    meta jsonb,
+    check (
+        jsonb_matches_schema(
+            '{"type": "object", "properties": {"a": {"type": "number"}, "b": {"type": "string"}}}',
+            meta
+        )
+    )
+);
+
+insert into bench_test_pg_jsonschema(meta)
+select
+    json_build_object(
+        'a', i,
+        'b', i::text
+    )
+from
+    generate_series(1, 200000) t(i);
+-- Query Completed in 2.18 seconds 
+```
+for comparison, the equivalent test using postgres-json-schema's `validate_json_schema` function ran in 5.54 seconds. pg_jsonschema's ~2.5x speedup on this example JSON schema grows quickly as the schema becomes more complex.
