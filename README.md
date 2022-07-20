@@ -102,3 +102,8 @@ pg_jsonschema=# select json_matches_schema('{"type": "object"}', '{}');
 ```
 
 for more complete installation guidelines see the [pgx](https://github.com/tcdi/pgx) docs.
+
+
+## Prior Art
+
+[postgres-json-schema](https://github.com/gavinwahl/postgres-json-schema) - an implementation of JSON Schema for Postgres written in PL/pgSQL
