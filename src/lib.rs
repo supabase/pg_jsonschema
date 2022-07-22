@@ -62,7 +62,7 @@ mod tests {
         "#,
         )
         .unwrap();
-        assert_eq!(result, false);
+        assert!(result);
     }
 
     #[pg_test]
@@ -73,7 +73,7 @@ mod tests {
         "#,
         )
         .unwrap();
-        assert_eq!(result, false);
+        assert!(!result);
     }
 
     #[pg_test]
@@ -84,7 +84,7 @@ mod tests {
         "#,
         )
         .unwrap();
-        assert_eq!(result, false);
+        assert!(result);
     }
 
     #[pg_test]
@@ -95,7 +95,7 @@ mod tests {
         "#,
         )
         .unwrap();
-        assert_eq!(result, false);
+        assert!(!result);
     }
 }
 
