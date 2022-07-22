@@ -106,6 +106,7 @@ for more complete installation guidelines see the [pgx](https://github.com/tcdi/
 ## Prior Art
 
 [postgres-json-schema](https://github.com/gavinwahl/postgres-json-schema) - an implementation of JSON Schema for Postgres written in PL/pgSQL
+[pgx_json_schema](https://github.com/jefbarn/pgx_json_schema) - an implementation of JSON Schema for Postgres written with pgx
 
 
 ## Benchmark
