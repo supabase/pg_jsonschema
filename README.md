@@ -75,7 +75,12 @@ values ('{"tags": [1, 3]}');
 --   DETAIL:  Failing row contains (2, {"tags": [1, 3]}).
 ```
 
+## JSON Schema Support
+
+pg_jsonschema is a (very) thin wrapper around the [jsonschema](https://docs.rs/jsonschema/latest/jsonschema/) rust crate. Visit their docs for full details on which drafts of the JSON Schema spec are supported.
+
 ## Installation
+
 
 Requires:
 - [pgx](https://github.com/tcdi/pgx)
@@ -105,8 +110,11 @@ for more complete installation guidelines see the [pgx](https://github.com/tcdi/
 
 ## Prior Art
 
-[postgres-json-schema](https://github.com/gavinwahl/postgres-json-schema) - an implementation of JSON Schema for Postgres written in PL/pgSQL
-[pgx_json_schema](https://github.com/jefbarn/pgx_json_schema) - an implementation of JSON Schema for Postgres written with pgx
+[postgres-json-schema](https://github.com/gavinwahl/postgres-json-schema) - JSON Schema Postgres extension written in PL/pgSQL
+
+[is_jsonb_validpgx_json_schema](https://github.com/furstenheim/is_jsonb_valid) - JSON Schema Postgres extension written in C
+
+[pgx_json_schema](https://github.com/jefbarn/pgx_json_schema) - JSON Schema Postgres extension written with pgx + jsonschema
 
 
 ## Benchmark
