@@ -80,7 +80,7 @@ mod tests {
     fn test_jsonb_matches_schema_spi() {
         let result = Spi::get_one::<bool>(
             r#"
-            select json_matches_schema('{"type": "object"}', '{}')
+            select jsonb_matches_schema('{"type": "object"}', '{}')
         "#,
         )
         .unwrap();
@@ -91,7 +91,7 @@ mod tests {
     fn test_jsonb_not_matches_schema_spi() {
         let result = Spi::get_one::<bool>(
             r#"
-            select json_matches_schema('{"type": "object"}', '1')
+            select jsonb_matches_schema('{"type": "object"}', '1')
         "#,
         )
         .unwrap();
