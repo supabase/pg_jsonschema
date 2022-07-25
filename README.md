@@ -79,6 +79,11 @@ values ('{"tags": [1, 3]}');
 
 pg_jsonschema is a (very) thin wrapper around the [jsonschema](https://docs.rs/jsonschema/latest/jsonschema/) rust crate. Visit their docs for full details on which drafts of the JSON Schema spec are supported.
 
+## Try it Out
+
+Spin up Postgres with pg_jsonschema installed in a docker container via `docker-compose up`. The database is available at `postgresql://postgres:password@localhost:5407/app`
+
+
 ## Installation
 
 

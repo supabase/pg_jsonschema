@@ -1,0 +1,19 @@
+version: '3'
+services:
+
+  db:
+    container_name: pg_jsonschema_db
+    build:
+        context: .
+        dockerfile: ./dockerfiles/db/Dockerfile
+    ports:
+      - 5407:5432
+    healthcheck:
+      test: ["CMD-SHELL", "PGUSER=postgres", "pg_isready"]
+      interval: 1s
+      timeout: 10s
+      retries: 5
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: app 
