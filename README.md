@@ -117,7 +117,7 @@ for more complete installation guidelines see the [pgx](https://github.com/tcdi/
 
 [postgres-json-schema](https://github.com/gavinwahl/postgres-json-schema) - JSON Schema Postgres extension written in PL/pgSQL
 
-[is_jsonb_validpgx_json_schema](https://github.com/furstenheim/is_jsonb_valid) - JSON Schema Postgres extension written in C
+[is_jsonb_valid](https://github.com/furstenheim/is_jsonb_valid) - JSON Schema Postgres extension written in C
 
 [pgx_json_schema](https://github.com/jefbarn/pgx_json_schema) - JSON Schema Postgres extension written with pgx + jsonschema
 
