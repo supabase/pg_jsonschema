@@ -1,6 +1,6 @@
 [package]
 name = "pg_jsonschema"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 
 [lib]
@@ -14,13 +14,13 @@ pg14 = ["pgx/pg14", "pgx-tests/pg14" ]
 pg_test = []
 
 [dependencies]
-pgx = "0.4.5"
+pgx = "~0.5.6"
 serde = "1.0"
 serde_json = "1.0"
 jsonschema = {version = "0.16.0", default-features = false, features = []}
 
 [dev-dependencies]
-pgx-tests = "0.4.5"
+pgx-tests = "0.5.6"
 
 [profile.dev]
 panic = "unwind"
