@@ -1,0 +1,13 @@
+version: '3'
+services:
+
+  test_pg_jsonschema:
+    container_name: pg_jsonschema_test
+    build:
+        context: ..
+        dockerfile: ./dockerfiles/db/Dockerfile
+    command:
+      - cargo
+      - pgx
+      - test
+      - pg14
