@@ -36,4 +36,8 @@ USER root
 COPY . .
 RUN cargo pgx install
 
+RUN chown -R postgres:postgres /home/supa
+RUN chown -R postgres:postgres /usr/share/postgresql/14/extension
+RUN chown -R postgres:postgres /usr/lib/postgresql/14/lib
+
 USER postgres

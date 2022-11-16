@@ -6,6 +6,8 @@ services:
     build:
         context: ..
         dockerfile: ./dockerfiles/db/Dockerfile
+    environment:
+      USER: postgres
     command:
       - cargo
       - pgx
