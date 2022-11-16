@@ -35,7 +35,7 @@ jobs:
 
       # Install Postgres
     - name: install postgres
-      run: sudo apt-get install -y clang-10 llvm-10 clang gcc make build-essential libz-dev zlib1g-dev strace libssl-dev pkg-config postgresql-${{ matrix.version }} postgresql-server-dev-${{ matrix.version }}
+      run: sudo apt-get install -y clang-11 llvm-11 clang gcc make build-essential libz-dev zlib1g-dev strace libssl-dev pkg-config postgresql-${{ matrix.version }} postgresql-server-dev-${{ matrix.version }}
 
     # update cargo indexes so we're sure we get the latest things from 'git' repo dependencies
     - name: cargo update
