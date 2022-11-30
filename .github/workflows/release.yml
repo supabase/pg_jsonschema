@@ -1,0 +1,127 @@
+name: Release
+
+
+on:
+  push:
+    # Sequence of patterns matched against refs/tags
+    tags:
+      - 'v*' # Push events to matching v*, i.e. v1.0, v20.15.10
+
+jobs:
+  release:
+    name: Create Release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+      - name: Create Release
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ github.ref }}
+          release_name: ${{ github.ref }}
+          body: |
+            Changes in this Release
+            - First Change
+            - Second Change
+          draft: false
+          prerelease: false
+
+  build-linux-gnu:
+    name: release artifacts
+    needs:
+      - release
+    strategy:
+      matrix:
+        extension_name:
+          - pg_jsonschema
+        package_name:
+          - pg-jsonschema
+        pgx_version:
+          - 0.6.0-alpha.1
+        postgres: [14, 15]
+        box:
+          - { runner: ubuntu-20.04, arch: amd64 }
+          - { runner: arm-runner, arch: arm64 }
+    runs-on: ${{ matrix.box.runner }}
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: build release artifacts
+        run: |
+          # Add postgres package repo
+          sudo sh -c 'echo "deb http://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" > /etc/apt/sources.list.d/pgdg.list'
+          wget -qO- https://www.postgresql.org/media/keys/ACCC4CF8.asc | sudo tee /etc/apt/trusted.gpg.d/pgdg.asc &>/dev/null
+
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends git build-essential libpq-dev curl libreadline6-dev zlib1g-dev pkg-config cmake
+          sudo apt-get install -y --no-install-recommends libreadline-dev zlib1g-dev flex bison libxml2-dev libxslt-dev libssl-dev libxml2-utils xsltproc ccache
+          sudo apt-get install -y --no-install-recommends clang libclang-dev gcc
+
+          # Install requested postgres version
+          sudo apt install -y postgresql-${{ matrix.postgres }} postgresql-server-dev-${{ matrix.postgres }} -y
+
+          # Ensure installed pg_config is first on path
+          export PATH=$PATH:/usr/lib/postgresql/${{ matrix.postgres }}/bin
+
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --no-modify-path --profile minimal --default-toolchain nightly && \
+            rustup --version && \
+            rustc --version && \
+            cargo --version
+
+          # Ensure cargo/rust on path
+          source "$HOME/.cargo/env"
+
+          cargo install cargo-pgx --version ${{ matrix.pgx_version }} --locked
+          cargo pgx init --pg${{ matrix.postgres }}=/usr/lib/postgresql/${{ matrix.postgres }}/bin/pg_config
+
+          # selects the pgVer from pg_config on path
+          # https://github.com/tcdi/pgx/issues/288
+          cargo pgx package --no-default-features --features pg${{ matrix.postgres }}
+
+          # Create installable package
+          mkdir archive
+          cp `find target/release -type f -name "${{ matrix.extension_name }}*"` archive
+
+          # Create directory structure
+          mkdir -p ${{ matrix.extension_name }}-${{ github.ref_name }}-pg${{ matrix.postgres }}-${{ matrix.box.arch }}-linux-gnu/usr/lib/postgresql/lib
+          mkdir -p ${{ matrix.extension_name }}-${{ github.ref_name }}-pg${{ matrix.postgres }}-${{ matrix.box.arch }}-linux-gnu/var/lib/postgresql/extension
+
+          # Copy files into directory structure
+          cp archive/*.so ${{ matrix.extension_name }}-${{ github.ref_name }}-pg${{ matrix.postgres }}-${{ matrix.box.arch }}-linux-gnu/usr/lib/postgresql/lib
+          cp archive/*.control ${{ matrix.extension_name }}-${{ github.ref_name }}-pg${{ matrix.postgres }}-${{ matrix.box.arch }}-linux-gnu/var/lib/postgresql/extension
+          cp archive/*.sql ${{ matrix.extension_name }}-${{ github.ref_name }}-pg${{ matrix.postgres }}-${{ matrix.box.arch }}-linux-gnu/var/lib/postgresql/extension
+
+          # Create install control file
+          extension_version=${{ github.ref_name }}
+          # strip the leading v
+          deb_version=${extension_version:1}
+
+          mkdir -p ${{ matrix.extension_name }}-${{ github.ref_name }}-pg${{ matrix.postgres }}-${{ matrix.box.arch }}-linux-gnu/DEBIAN
+          touch ${{ matrix.extension_name }}-${{ github.ref_name }}-pg${{ matrix.postgres }}-${{ matrix.box.arch }}-linux-gnu/DEBIAN/control
+          echo 'Package: ${{ matrix.package_name }}' >> ${{ matrix.extension_name }}-${{ github.ref_name }}-pg${{ matrix.postgres }}-${{ matrix.box.arch }}-linux-gnu/DEBIAN/control
+          echo 'Version:' ${deb_version} >> ${{ matrix.extension_name }}-${{ github.ref_name }}-pg${{ matrix.postgres }}-${{ matrix.box.arch }}-linux-gnu/DEBIAN/control
+          echo 'Architecture: ${{ matrix.box.arch }}' >> ${{ matrix.extension_name }}-${{ github.ref_name }}-pg${{ matrix.postgres }}-${{ matrix.box.arch }}-linux-gnu/DEBIAN/control
+          echo 'Maintainer: supabase' >> ${{ matrix.extension_name }}-${{ github.ref_name }}-pg${{ matrix.postgres }}-${{ matrix.box.arch }}-linux-gnu/DEBIAN/control
+          echo 'Description: A PostgreSQL extension' >> ${{ matrix.extension_name }}-${{ github.ref_name }}-pg${{ matrix.postgres }}-${{ matrix.box.arch }}-linux-gnu/DEBIAN/control
+
+          # Create deb package
+          sudo chown -R root:root ${{ matrix.extension_name }}-${{ github.ref_name }}-pg${{ matrix.postgres }}-${{ matrix.box.arch }}-linux-gnu
+          sudo chmod -R 00755 ${{ matrix.extension_name }}-${{ github.ref_name }}-pg${{ matrix.postgres }}-${{ matrix.box.arch }}-linux-gnu
+          sudo dpkg-deb --build --root-owner-group ${{ matrix.extension_name }}-${{ github.ref_name }}-pg${{ matrix.postgres }}-${{ matrix.box.arch }}-linux-gnu
+
+      - name: Get upload url
+        run: echo UPLOAD_URL=$(curl --silent https://api.github.com/repos/${{ github.repository }}/releases/latest | jq .upload_url --raw-output) >> $GITHUB_ENV
+
+      - name: Upload release asset
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ env.UPLOAD_URL }}
+          asset_path: ./${{ matrix.extension_name }}-${{ github.ref_name }}-pg${{ matrix.postgres }}-${{ matrix.box.arch }}-linux-gnu.deb
+          asset_name: ${{ matrix.extension_name }}-${{ github.ref_name }}-pg${{ matrix.postgres }}-${{ matrix.box.arch }}-linux-gnu.deb
+          asset_content_type: application/vnd.debian.binary-package
