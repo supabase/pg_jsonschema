@@ -61,6 +61,7 @@ mod tests {
             select json_matches_schema('{"type": "object"}', '{}')
         "#,
         )
+        .unwrap()
         .unwrap();
         assert!(result);
     }
@@ -72,6 +73,7 @@ mod tests {
             select json_matches_schema('{"type": "object"}', '1')
         "#,
         )
+        .unwrap()
         .unwrap();
         assert!(!result);
     }
@@ -83,6 +85,7 @@ mod tests {
             select jsonb_matches_schema('{"type": "object"}', '{}')
         "#,
         )
+        .unwrap()
         .unwrap();
         assert!(result);
     }
@@ -94,6 +97,7 @@ mod tests {
             select jsonb_matches_schema('{"type": "object"}', '1')
         "#,
         )
+        .unwrap()
         .unwrap();
         assert!(!result);
     }
