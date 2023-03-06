@@ -2,4 +2,4 @@ comment = 'pg_jsonschema'
 default_version = '@CARGO_VERSION@'
 module_pathname = '$libdir/pg_jsonschema'
 relocatable = false
-superuser = false
+superuser = true
