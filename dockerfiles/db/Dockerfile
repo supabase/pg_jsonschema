@@ -27,14 +27,14 @@ RUN \
   cargo --version
 
 # PGX
-RUN cargo install cargo-pgx --version 0.7.1 --locked
+RUN cargo install cargo-pgrx --version 0.8.4 --locked
 
-RUN cargo pgx init --pg14 $(which pg_config)
+RUN cargo pgrx init --pg14 $(which pg_config)
 
 USER root
 
 COPY . .
-RUN cargo pgx install
+RUN cargo pgrx install
 
 RUN chown -R postgres:postgres /home/supa
 RUN chown -R postgres:postgres /usr/share/postgresql/14/extension
