@@ -10,6 +10,6 @@ services:
       USER: postgres
     command:
       - cargo
-      - pgx
+      - pgrx
       - test
       - pg14

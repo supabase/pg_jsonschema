@@ -88,11 +88,11 @@ Spin up Postgres with pg_jsonschema installed in a docker container via `docker-
 
 
 Requires:
-- [pgx](https://github.com/tcdi/pgx)
+- [pgrx](https://github.com/tcdi/pgrx)
 
 
 ```shell
-cargo pgx run
+cargo pgrx run
 ```
 
 which drops into a psql prompt.
@@ -110,7 +110,7 @@ pg_jsonschema=# select json_matches_schema('{"type": "object"}', '{}');
 (1 row)
 ```
 
-for more complete installation guidelines see the [pgx](https://github.com/tcdi/pgx) docs.
+for more complete installation guidelines see the [pgrx](https://github.com/tcdi/pgrx) docs.
 
 
 ## Prior Art
@@ -119,7 +119,7 @@ for more complete installation guidelines see the [pgx](https://github.com/tcdi/
 
 [is_jsonb_valid](https://github.com/furstenheim/is_jsonb_valid) - JSON Schema Postgres extension written in C
 
-[pgx_json_schema](https://github.com/jefbarn/pgx_json_schema) - JSON Schema Postgres extension written with pgx + jsonschema
+[pgrx_json_schema](https://github.com/jefbarn/pgrx_json_schema) - JSON Schema Postgres extension written with pgrx + jsonschema
 
 
 ## Benchmark

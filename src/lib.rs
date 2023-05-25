@@ -1,4 +1,4 @@
-use pgx::*;
+use pgrx::*;
 
 pg_module_magic!();
 
@@ -15,7 +15,7 @@ fn jsonb_matches_schema(schema: Json, instance: JsonB) -> bool {
 #[pg_schema]
 #[cfg(any(test, feature = "pg_test"))]
 mod tests {
-    use pgx::*;
+    use pgrx::*;
     use serde_json::json;
 
     #[pg_test]
