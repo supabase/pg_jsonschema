@@ -58,7 +58,7 @@ create table customer(
                         }
                     }
                 }
-            }',
+            }'::json,
             metadata
         )
     )
