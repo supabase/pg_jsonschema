@@ -18,8 +18,11 @@
 
 
 ## API
-SQL functions:
+Two SQL functions:
+- json_matches_schema
+- jsonb_matches_schema (note the **jsonb** in front)
 
+With the following signatures
 ```sql
 -- Validates a json *instance* against a *schema*
 json_matches_schema(schema json, instance json) returns bool
