@@ -27,7 +27,7 @@ RUN \
   cargo --version
 
 # PGX
-RUN cargo install cargo-pgrx --version 0.8.4 --locked
+RUN cargo install cargo-pgrx --version 0.9.7 --locked
 
 RUN cargo pgrx init --pg14 $(which pg_config)
 
