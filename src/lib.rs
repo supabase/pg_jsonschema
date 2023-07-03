@@ -12,6 +12,30 @@ fn jsonb_matches_schema(schema: Json, instance: JsonB) -> bool {
     jsonschema::is_valid(&schema.0, &instance.0)
 }
 
+#[pg_extern(immutable, strict)]
+fn validate_json_schema(schema: Json, instance: Json) -> Result<(), Vec<String>> {
+    let compiled = match jsonschema::JSONSchema::compile(&schema.0) {
+        Ok(c) => c,
+        Err(e) => Err(vec![e.to_string()]),
+    };
+    match compiled.validate(&instance.0) {
+        Ok(_) => Ok(()),
+        Err(e) => Err(e.into_iter().map(String::from).collect::<String>()),
+    }
+}
+
+#[pg_extern(immutable, strict)]
+fn validate_jsonb_schema(schema: Json, instance: JsonB) -> Result<(), Vec<String>> {
+    let compiled = match jsonschema::JSONSchema::compile(&schema.0) {
+        Ok(c) => c,
+        Err(e) => Err(vec![e.to_string()]),
+    };
+    match compiled.validate(&instance.0) {
+        Ok(_) => Ok(()),
+        Err(e) => Err(e.into_iter().map(String::from).collect::<String>()),
+    }
+}
+
 #[pg_schema]
 #[cfg(any(test, feature = "pg_test"))]
 mod tests {
