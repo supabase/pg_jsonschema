@@ -12,6 +12,20 @@ fn jsonb_matches_schema(schema: Json, instance: JsonB) -> bool {
     jsonschema::is_valid(&schema.0, &instance.0)
 }
 
+#[pg_extern(immutable, strict)]
+fn jsonschema_is_valid(schema: Json) -> bool {
+    match jsonschema::JSONSchema::compile(&schema.0) {
+        Ok(_) => true,
+        Err(e) => {
+            notice!(
+                "Invalid JSON schema at path: {}",
+                e.instance_path.to_string()
+            );
+            false
+        }
+    }
+}
+
 #[pg_schema]
 #[cfg(any(test, feature = "pg_test"))]
 mod tests {
@@ -100,6 +114,20 @@ mod tests {
         .unwrap()
         .unwrap();
         assert!(!result);
+    }
+
+    #[pg_test]
+    fn test_jsonschema_is_valid() {
+        assert!(crate::jsonschema_is_valid(Json(json!({
+            "type": "object"
+        }))));
+    }
+
+    #[pg_test]
+    fn test_jsonschema_is_not_valid() {
+        assert!(!crate::jsonschema_is_valid(Json(json!({
+            "type": "obj"
+        }))));
     }
 }
 
