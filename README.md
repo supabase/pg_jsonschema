@@ -42,7 +42,6 @@ create extension pg_jsonschema;
 
 create table customer(
     id serial primary key,
-    ...
     metadata json,
 
     check (
