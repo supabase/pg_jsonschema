@@ -17,10 +17,13 @@ fn jsonschema_is_valid(schema: Json) -> bool {
     match jsonschema::JSONSchema::compile(&schema.0) {
         Ok(_) => true,
         Err(e) => {
-            notice!(
-                "Invalid JSON schema at path: {}",
-                e.instance_path.to_string()
-            );
+            // Only call notice! for a non empty instance_path
+            if e.instance_path.last().is_some() {
+                notice!(
+                    "Invalid JSON schema at path: {}",
+                    e.instance_path.to_string()
+                );
+            }
             false
         }
     }
