@@ -29,6 +29,60 @@ fn jsonschema_is_valid(schema: Json) -> bool {
     }
 }
 
+#[pg_extern(immutable, strict)]
+fn validate_json_schema(schema: Json, instance: Json) -> bool {
+    let compiled = match jsonschema::JSONSchema::compile(&schema.0) {
+        Ok(c) => c,
+        Err(e) => {
+            // Only call notice! for a non empty instance_path
+            if e.instance_path.last().is_some() {
+                notice!(
+                    "Invalid JSON schema at path: {}",
+                    e.instance_path.to_string()
+                );
+            }
+            false
+        }
+    };
+    match compiled.validate(&instance.0) {
+        Ok(_) => true,
+        Err(e) => {
+            let _ = e
+                .into_iter()
+                .map(|e| notice!("Invalid instance {} at {}", e.instance, e.instance_path))
+                .collect();
+            false
+        }
+    }
+}
+
+#[pg_extern(immutable, strict)]
+fn validate_jsonb_schema(schema: Json, instance: JsonB) -> Result<(), Vec<String>> {
+    let compiled = match jsonschema::JSONSchema::compile(&schema.0) {
+        Ok(c) => c,
+        Err(e) => {
+            // Only call notice! for a non empty instance_path
+            if e.instance_path.last().is_some() {
+                notice!(
+                    "Invalid JSON schema at path: {}",
+                    e.instance_path.to_string()
+                );
+            }
+            false
+        }
+    };
+    match compiled.validate(&instance.0) {
+        Ok(_) => true,
+        Err(e) => {
+            let _ = e
+                .into_iter()
+                .map(|e| notice!("Invalid instance {} at {}", e.instance, e.instance_path))
+                .collect();
+            false
+        }
+    }
+}
+
 #[pg_schema]
 #[cfg(any(test, feature = "pg_test"))]
 mod tests {
