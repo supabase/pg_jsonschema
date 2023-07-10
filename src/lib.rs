@@ -41,19 +41,21 @@ fn validate_json_schema(schema: Json, instance: Json) -> bool {
                     e.instance_path.to_string()
                 );
             }
-            false
+            return false;
         }
     };
-    match compiled.validate(&instance.0) {
+
+    let is_valid = match compiled.validate(&instance.0) {
         Ok(_) => true,
         Err(e) => {
             let _ = e
                 .into_iter()
-                .map(|e| notice!("Invalid instance {} at {}", e.instance, e.instance_path))
-                .collect();
+                .for_each(|e| notice!("Invalid instance {} at {}", e.instance, e.instance_path));
             false
         }
-    }
+    };
+
+    is_valid
 }
 
 #[pg_extern(immutable, strict)]
@@ -68,19 +70,21 @@ fn validate_jsonb_schema(schema: Json, instance: JsonB) -> bool {
                     e.instance_path.to_string()
                 );
             }
-            false
+            return false;
         }
     };
-    match compiled.validate(&instance.0) {
+
+    let is_valid = match compiled.validate(&instance.0) {
         Ok(_) => true,
         Err(e) => {
             let _ = e
                 .into_iter()
-                .map(|e| notice!("Invalid instance {} at {}", e.instance, e.instance_path))
-                .collect();
+                .for_each(|e| notice!("Invalid instance {} at {}", e.instance, e.instance_path));
             false
         }
-    }
+    };
+
+    is_valid
 }
 
 #[pg_schema]
