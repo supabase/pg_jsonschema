@@ -13,26 +13,19 @@ fn jsonb_matches_schema(schema: Json, instance: JsonB) -> bool {
 }
 
 #[pg_extern(immutable, strict)]
-fn validate_json_schema(schema: Json, instance: Json) -> Result<(), Vec<String>> {
-    let compiled = match jsonschema::JSONSchema::compile(&schema.0) {
-        Ok(c) => c,
-        Err(e) => Err(vec![e.to_string()]),
-    };
-    match compiled.validate(&instance.0) {
-        Ok(_) => Ok(()),
-        Err(e) => Err(e.into_iter().map(String::from).collect::<String>()),
-    }
-}
-
-#[pg_extern(immutable, strict)]
-fn validate_jsonb_schema(schema: Json, instance: JsonB) -> Result<(), Vec<String>> {
-    let compiled = match jsonschema::JSONSchema::compile(&schema.0) {
-        Ok(c) => c,
-        Err(e) => Err(vec![e.to_string()]),
-    };
-    match compiled.validate(&instance.0) {
-        Ok(_) => Ok(()),
-        Err(e) => Err(e.into_iter().map(String::from).collect::<String>()),
+fn jsonschema_is_valid(schema: Json) -> bool {
+    match jsonschema::JSONSchema::compile(&schema.0) {
+        Ok(_) => true,
+        Err(e) => {
+            // Only call notice! for a non empty instance_path
+            if e.instance_path.last().is_some() {
+                notice!(
+                    "Invalid JSON schema at path: {}",
+                    e.instance_path.to_string()
+                );
+            }
+            false
+        }
     }
 }
 
@@ -124,6 +117,20 @@ mod tests {
         .unwrap()
         .unwrap();
         assert!(!result);
+    }
+
+    #[pg_test]
+    fn test_jsonschema_is_valid() {
+        assert!(crate::jsonschema_is_valid(Json(json!({
+            "type": "object"
+        }))));
+    }
+
+    #[pg_test]
+    fn test_jsonschema_is_not_valid() {
+        assert!(!crate::jsonschema_is_valid(Json(json!({
+            "type": "obj"
+        }))));
     }
 }
 
