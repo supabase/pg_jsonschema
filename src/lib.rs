@@ -190,6 +190,90 @@ mod tests {
             "type": "obj"
         }))));
     }
+
+    #[pg_test]
+    fn test_json_validates_schema_rs() {
+        let max_length: i32 = 5;
+        assert!(crate::validate_json_schema(
+            Json(json!({ "maxLength": max_length })),
+            Json(json!("foo")),
+        ));
+    }
+
+    #[pg_test]
+    fn test_json_not_validates_schema_rs() {
+        let max_length: i32 = 5;
+        assert!(!crate::validate_json_schema(
+            Json(json!({ "maxLength": max_length })),
+            Json(json!("foobar")),
+        ));
+    }
+
+    #[pg_test]
+    fn test_jsonb_validates_schema_rs() {
+        let max_length: i32 = 5;
+        assert!(crate::validate_jsonb_schema(
+            Json(json!({ "maxLength": max_length })),
+            JsonB(json!("foo")),
+        ));
+    }
+
+    #[pg_test]
+    fn test_jsonb_not_validates_schema_rs() {
+        let max_length: i32 = 5;
+        assert!(!crate::validate_jsonb_schema(
+            Json(json!({ "maxLength": max_length })),
+            JsonB(json!("foobar")),
+        ));
+    }
+
+    #[pg_test]
+    fn test_json_validates_schema_spi() {
+        let result = Spi::get_one::<bool>(
+            r#"
+            select validate_json_schema('{"type": "object"}', '{}')
+        "#,
+        )
+        .unwrap()
+        .unwrap();
+        assert!(result);
+    }
+
+    #[pg_test]
+    fn test_json_not_validates_schema_spi() {
+        let result = Spi::get_one::<bool>(
+            r#"
+            select validate_json_schema('{"type": "object"}', '1')
+        "#,
+        )
+        .unwrap()
+        .unwrap();
+        assert!(!result);
+    }
+
+    #[pg_test]
+    fn test_jsonb_validates_schema_spi() {
+        let result = Spi::get_one::<bool>(
+            r#"
+            select validate_jsonb_schema('{"type": "object"}', '{}')
+        "#,
+        )
+        .unwrap()
+        .unwrap();
+        assert!(result);
+    }
+
+    #[pg_test]
+    fn test_jsonb_not_validates_schema_spi() {
+        let result = Spi::get_one::<bool>(
+            r#"
+            select validate_jsonb_schema('{"type": "object"}', '1')
+        "#,
+        )
+        .unwrap()
+        .unwrap();
+        assert!(!result);
+    }
 }
 
 #[cfg(test)]
