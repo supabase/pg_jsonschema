@@ -57,7 +57,7 @@ fn validate_json_schema(schema: Json, instance: Json) -> bool {
 }
 
 #[pg_extern(immutable, strict)]
-fn validate_jsonb_schema(schema: Json, instance: JsonB) -> Result<(), Vec<String>> {
+fn validate_jsonb_schema(schema: Json, instance: JsonB) -> bool {
     let compiled = match jsonschema::JSONSchema::compile(&schema.0) {
         Ok(c) => c,
         Err(e) => {
