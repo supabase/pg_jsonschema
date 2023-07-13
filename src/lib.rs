@@ -4,12 +4,58 @@ pg_module_magic!();
 
 #[pg_extern(immutable, strict)]
 fn json_matches_schema(schema: Json, instance: Json) -> bool {
-    jsonschema::is_valid(&schema.0, &instance.0)
+    if jsonschema::is_valid(&schema.0, &instance.0) {
+        true
+    } else {
+        let compiled = match jsonschema::JSONSchema::compile(&schema.0) {
+            Ok(c) => c,
+            Err(e) => {
+                // Only call notice! for a non empty instance_path
+                if e.instance_path.last().is_some() {
+                    notice!(
+                        "Invalid JSON schema at path: {}",
+                        e.instance_path.to_string()
+                    );
+                }
+                return false;
+            }
+        };
+
+        let err = compiled.validate(&instance.0).unwrap_err();
+        let _ = err
+            .into_iter()
+            .for_each(|e| notice!("Invalid instance {} at {}", e.instance, e.instance_path));
+
+        false
+    }
 }
 
 #[pg_extern(immutable, strict)]
 fn jsonb_matches_schema(schema: Json, instance: JsonB) -> bool {
-    jsonschema::is_valid(&schema.0, &instance.0)
+    if jsonschema::is_valid(&schema.0, &instance.0) {
+        true
+    } else {
+        let compiled = match jsonschema::JSONSchema::compile(&schema.0) {
+            Ok(c) => c,
+            Err(e) => {
+                // Only call notice! for a non empty instance_path
+                if e.instance_path.last().is_some() {
+                    notice!(
+                        "Invalid JSON schema at path: {}",
+                        e.instance_path.to_string()
+                    );
+                }
+                return false;
+            }
+        };
+
+        let err = compiled.validate(&instance.0).unwrap_err();
+        let _ = err
+            .into_iter()
+            .for_each(|e| notice!("Invalid instance {} at {}", e.instance, e.instance_path));
+
+        false
+    }
 }
 
 #[pg_extern(immutable, strict)]
@@ -27,64 +73,6 @@ fn jsonschema_is_valid(schema: Json) -> bool {
             false
         }
     }
-}
-
-#[pg_extern(immutable, strict)]
-fn validate_json_schema(schema: Json, instance: Json) -> bool {
-    let compiled = match jsonschema::JSONSchema::compile(&schema.0) {
-        Ok(c) => c,
-        Err(e) => {
-            // Only call notice! for a non empty instance_path
-            if e.instance_path.last().is_some() {
-                notice!(
-                    "Invalid JSON schema at path: {}",
-                    e.instance_path.to_string()
-                );
-            }
-            return false;
-        }
-    };
-
-    let is_valid = match compiled.validate(&instance.0) {
-        Ok(_) => true,
-        Err(e) => {
-            let _ = e
-                .into_iter()
-                .for_each(|e| notice!("Invalid instance {} at {}", e.instance, e.instance_path));
-            false
-        }
-    };
-
-    is_valid
-}
-
-#[pg_extern(immutable, strict)]
-fn validate_jsonb_schema(schema: Json, instance: JsonB) -> bool {
-    let compiled = match jsonschema::JSONSchema::compile(&schema.0) {
-        Ok(c) => c,
-        Err(e) => {
-            // Only call notice! for a non empty instance_path
-            if e.instance_path.last().is_some() {
-                notice!(
-                    "Invalid JSON schema at path: {}",
-                    e.instance_path.to_string()
-                );
-            }
-            return false;
-        }
-    };
-
-    let is_valid = match compiled.validate(&instance.0) {
-        Ok(_) => true,
-        Err(e) => {
-            let _ = e
-                .into_iter()
-                .for_each(|e| notice!("Invalid instance {} at {}", e.instance, e.instance_path));
-            false
-        }
-    };
-
-    is_valid
 }
 
 #[pg_schema]
@@ -189,90 +177,6 @@ mod tests {
         assert!(!crate::jsonschema_is_valid(Json(json!({
             "type": "obj"
         }))));
-    }
-
-    #[pg_test]
-    fn test_json_validates_schema_rs() {
-        let max_length: i32 = 5;
-        assert!(crate::validate_json_schema(
-            Json(json!({ "maxLength": max_length })),
-            Json(json!("foo")),
-        ));
-    }
-
-    #[pg_test]
-    fn test_json_not_validates_schema_rs() {
-        let max_length: i32 = 5;
-        assert!(!crate::validate_json_schema(
-            Json(json!({ "maxLength": max_length })),
-            Json(json!("foobar")),
-        ));
-    }
-
-    #[pg_test]
-    fn test_jsonb_validates_schema_rs() {
-        let max_length: i32 = 5;
-        assert!(crate::validate_jsonb_schema(
-            Json(json!({ "maxLength": max_length })),
-            JsonB(json!("foo")),
-        ));
-    }
-
-    #[pg_test]
-    fn test_jsonb_not_validates_schema_rs() {
-        let max_length: i32 = 5;
-        assert!(!crate::validate_jsonb_schema(
-            Json(json!({ "maxLength": max_length })),
-            JsonB(json!("foobar")),
-        ));
-    }
-
-    #[pg_test]
-    fn test_json_validates_schema_spi() {
-        let result = Spi::get_one::<bool>(
-            r#"
-            select validate_json_schema('{"type": "object"}', '{}')
-        "#,
-        )
-        .unwrap()
-        .unwrap();
-        assert!(result);
-    }
-
-    #[pg_test]
-    fn test_json_not_validates_schema_spi() {
-        let result = Spi::get_one::<bool>(
-            r#"
-            select validate_json_schema('{"type": "object"}', '1')
-        "#,
-        )
-        .unwrap()
-        .unwrap();
-        assert!(!result);
-    }
-
-    #[pg_test]
-    fn test_jsonb_validates_schema_spi() {
-        let result = Spi::get_one::<bool>(
-            r#"
-            select validate_jsonb_schema('{"type": "object"}', '{}')
-        "#,
-        )
-        .unwrap()
-        .unwrap();
-        assert!(result);
-    }
-
-    #[pg_test]
-    fn test_jsonb_not_validates_schema_spi() {
-        let result = Spi::get_one::<bool>(
-            r#"
-            select validate_jsonb_schema('{"type": "object"}', '1')
-        "#,
-        )
-        .unwrap()
-        .unwrap();
-        assert!(!result);
     }
 }
 
