@@ -7,20 +7,9 @@ fn json_matches_schema(schema: Json, instance: Json) -> bool {
     if jsonschema::is_valid(&schema.0, &instance.0) {
         true
     } else {
-        let compiled = match jsonschema::JSONSchema::compile(&schema.0) {
-            Ok(c) => c,
-            Err(e) => {
-                // Only call notice! for a non empty instance_path
-                if e.instance_path.last().is_some() {
-                    notice!(
-                        "Invalid JSON schema at path: {}",
-                        e.instance_path.to_string()
-                    );
-                }
-                return false;
-            }
-        };
-
+        // "jsonschema::is_valid(...)" already checks the validaity of JSON schema, and panics if it is invalid.
+        // Hence, we just unwrap the schema here.
+        let compiled = jsonschema::JSONSchema::compile(&schema.0).unwrap();
         let err = compiled.validate(&instance.0).unwrap_err();
         let _ = err
             .into_iter()
@@ -35,20 +24,9 @@ fn jsonb_matches_schema(schema: Json, instance: JsonB) -> bool {
     if jsonschema::is_valid(&schema.0, &instance.0) {
         true
     } else {
-        let compiled = match jsonschema::JSONSchema::compile(&schema.0) {
-            Ok(c) => c,
-            Err(e) => {
-                // Only call notice! for a non empty instance_path
-                if e.instance_path.last().is_some() {
-                    notice!(
-                        "Invalid JSON schema at path: {}",
-                        e.instance_path.to_string()
-                    );
-                }
-                return false;
-            }
-        };
-
+        // "jsonschema::is_valid(...)" already checks the validaity of JSON schema, and panics if it is invalid.
+        // Hence, we just unwrap the schema here.
+        let compiled = jsonschema::JSONSchema::compile(&schema.0).unwrap();
         let err = compiled.validate(&instance.0).unwrap_err();
         let _ = err
             .into_iter()
