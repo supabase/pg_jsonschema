@@ -4,36 +4,12 @@ pg_module_magic!();
 
 #[pg_extern(immutable, strict)]
 fn json_matches_schema(schema: Json, instance: Json) -> bool {
-    if jsonschema::is_valid(&schema.0, &instance.0) {
-        true
-    } else {
-        // "jsonschema::is_valid(...)" already checks the validity of JSON schema, and panics if it is invalid.
-        // Hence, we just unwrap the schema here.
-        let compiled = jsonschema::JSONSchema::compile(&schema.0).unwrap();
-        let err = compiled.validate(&instance.0).unwrap_err();
-        let _ = err
-            .into_iter()
-            .for_each(|e| notice!("Invalid instance {} at {}", e.instance, e.instance_path));
-
-        false
-    }
+    jsonschema::is_valid(&schema.0, &instance.0)
 }
 
 #[pg_extern(immutable, strict)]
 fn jsonb_matches_schema(schema: Json, instance: JsonB) -> bool {
-    if jsonschema::is_valid(&schema.0, &instance.0) {
-        true
-    } else {
-        // "jsonschema::is_valid(...)" already checks the validity of JSON schema, and panics if it is invalid.
-        // Hence, we just unwrap the schema here.
-        let compiled = jsonschema::JSONSchema::compile(&schema.0).unwrap();
-        let err = compiled.validate(&instance.0).unwrap_err();
-        let _ = err
-            .into_iter()
-            .for_each(|e| notice!("Invalid instance {} at {}", e.instance, e.instance_path));
-
-        false
-    }
+    jsonschema::is_valid(&schema.0, &instance.0)
 }
 
 #[pg_extern(immutable, strict)]
@@ -51,6 +27,19 @@ fn jsonschema_is_valid(schema: Json) -> bool {
             false
         }
     }
+}
+
+#[pg_extern(immutable, strict)]
+fn jsonschema_validation_errors(schema: Json, instance: Json) -> Vec<String> {
+    let schema = match jsonschema::JSONSchema::compile(&schema.0) {
+        Ok(s) => s,
+        Err(e) => return vec![e.to_string()],
+    };
+    let errors = match schema.validate(&instance.0) {
+        Ok(_) => vec![],
+        Err(e) => e.into_iter().map(|e| e.to_string()).collect(),
+    };
+    errors
 }
 
 #[pg_schema]
