@@ -182,16 +182,15 @@ mod tests {
                         "type": "boolean"
                     },
                     "additionalProperties": false,
-                    "required": ["foo", "bar", "baz"]
                 }
             })),
-            Json(json!({"foo": 1, "bar": [], "bat": true})),
+            Json(json!({"foo": 1, "bar": [], "baz": "1"})),
         );
-        assert!(errors.len() == 1);
-        assert!(
-            errors[0]
-                == "[\"foo\",\"bar\",\"baz\"] is not of types \"boolean\", \"object\"".to_string()
-        );
+
+        assert!(errors.len() == 3);
+        assert!(errors[0] == "[] is not of type \"number\"".to_string());
+        assert!(errors[1] == "\"1\" is not of type \"boolean\"".to_string());
+        assert!(errors[2] == "1 is not of type \"string\"".to_string());
     }
 }
 
