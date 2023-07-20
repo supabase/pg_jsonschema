@@ -145,6 +145,54 @@ mod tests {
             "type": "obj"
         }))));
     }
+
+    #[pg_test]
+    fn test_jsonschema_validation_errors_none() {
+        let errors = crate::jsonschema_validation_errors(
+            Json(json!({ "maxLength": 4 })),
+            Json(json!("foo")),
+        );
+        assert!(errors.len() == 0);
+    }
+
+    #[pg_test]
+    fn test_jsonschema_validation_erros_one() {
+        let errors = crate::jsonschema_validation_errors(
+            Json(json!({ "maxLength": 4 })),
+            Json(json!("123456789")),
+        );
+        assert!(errors.len() == 1);
+        assert!(errors[0] == "\"123456789\" is longer than 4 characters".to_string());
+    }
+
+    #[pg_test]
+    fn test_jsonschema_validation_errors_multiple() {
+        let errors = crate::jsonschema_validation_errors(
+            Json(json!(
+            {
+                "type": "object",
+                "properties": {
+                    "foo": {
+                        "type": "string"
+                    },
+                    "bar": {
+                        "type": "number"
+                    },
+                    "baz": {
+                        "type": "boolean"
+                    },
+                    "additionalProperties": false,
+                    "required": ["foo", "bar", "baz"]
+                }
+            })),
+            Json(json!({"foo": 1, "bar": [], "bat": true})),
+        );
+        assert!(errors.len() == 1);
+        assert!(
+            errors[0]
+                == "[\"foo\",\"bar\",\"baz\"] is not of types \"boolean\", \"object\"".to_string()
+        );
+    }
 }
 
 #[cfg(test)]
