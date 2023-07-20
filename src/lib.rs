@@ -29,6 +29,19 @@ fn jsonschema_is_valid(schema: Json) -> bool {
     }
 }
 
+#[pg_extern(immutable, strict)]
+fn jsonschema_validation_errors(schema: Json, instance: Json) -> Vec<String> {
+    let schema = match jsonschema::JSONSchema::compile(&schema.0) {
+        Ok(s) => s,
+        Err(e) => return vec![e.to_string()],
+    };
+    let errors = match schema.validate(&instance.0) {
+        Ok(_) => vec![],
+        Err(e) => e.into_iter().map(|e| e.to_string()).collect(),
+    };
+    errors
+}
+
 #[pg_schema]
 #[cfg(any(test, feature = "pg_test"))]
 mod tests {
@@ -131,6 +144,53 @@ mod tests {
         assert!(!crate::jsonschema_is_valid(Json(json!({
             "type": "obj"
         }))));
+    }
+
+    #[pg_test]
+    fn test_jsonschema_validation_errors_none() {
+        let errors = crate::jsonschema_validation_errors(
+            Json(json!({ "maxLength": 4 })),
+            Json(json!("foo")),
+        );
+        assert!(errors.len() == 0);
+    }
+
+    #[pg_test]
+    fn test_jsonschema_validation_erros_one() {
+        let errors = crate::jsonschema_validation_errors(
+            Json(json!({ "maxLength": 4 })),
+            Json(json!("123456789")),
+        );
+        assert!(errors.len() == 1);
+        assert!(errors[0] == "\"123456789\" is longer than 4 characters".to_string());
+    }
+
+    #[pg_test]
+    fn test_jsonschema_validation_errors_multiple() {
+        let errors = crate::jsonschema_validation_errors(
+            Json(json!(
+            {
+                "type": "object",
+                "properties": {
+                    "foo": {
+                        "type": "string"
+                    },
+                    "bar": {
+                        "type": "number"
+                    },
+                    "baz": {
+                        "type": "boolean"
+                    },
+                    "additionalProperties": false,
+                }
+            })),
+            Json(json!({"foo": 1, "bar": [], "baz": "1"})),
+        );
+
+        assert!(errors.len() == 3);
+        assert!(errors[0] == "[] is not of type \"number\"".to_string());
+        assert!(errors[1] == "\"1\" is not of type \"boolean\"".to_string());
+        assert!(errors[2] == "1 is not of type \"string\"".to_string());
     }
 }
 
