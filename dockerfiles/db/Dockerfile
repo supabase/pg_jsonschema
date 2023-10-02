@@ -1,11 +1,11 @@
-FROM postgres:14
+FROM postgres:16
 RUN apt-get update
 
 ENV build_deps ca-certificates \
   git \
   build-essential \
   libpq-dev \
-  postgresql-server-dev-14 \
+  postgresql-server-dev-16 \
   curl \
   libreadline6-dev \
   zlib1g-dev
@@ -27,9 +27,9 @@ RUN \
   cargo --version
 
 # PGX
-RUN cargo install cargo-pgrx --version 0.10.1 --locked
+RUN cargo install cargo-pgrx --version 0.10.2 --locked
 
-RUN cargo pgrx init --pg14 $(which pg_config)
+RUN cargo pgrx init --pg16 $(which pg_config)
 
 USER root
 
@@ -37,7 +37,7 @@ COPY . .
 RUN cargo pgrx install
 
 RUN chown -R postgres:postgres /home/supa
-RUN chown -R postgres:postgres /usr/share/postgresql/14/extension
-RUN chown -R postgres:postgres /usr/lib/postgresql/14/lib
+RUN chown -R postgres:postgres /usr/share/postgresql/16/extension
+RUN chown -R postgres:postgres /usr/lib/postgresql/16/lib
 
 USER postgres
