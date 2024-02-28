@@ -1068,7 +1068,7 @@ dependencies = [
 
 [[package]]
 name = "pg_jsonschema"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "jsonschema",
  "pgrx",
