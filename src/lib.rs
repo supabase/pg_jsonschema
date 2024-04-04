@@ -2,17 +2,17 @@ use pgrx::*;
 
 pg_module_magic!();
 
-#[pg_extern(immutable, strict)]
+#[pg_extern(immutable, strict, parallel_safe)]
 fn json_matches_schema(schema: Json, instance: Json) -> bool {
     jsonschema::is_valid(&schema.0, &instance.0)
 }
 
-#[pg_extern(immutable, strict)]
+#[pg_extern(immutable, strict, parallel_safe)]
 fn jsonb_matches_schema(schema: Json, instance: JsonB) -> bool {
     jsonschema::is_valid(&schema.0, &instance.0)
 }
 
-#[pg_extern(immutable, strict)]
+#[pg_extern(immutable, strict, parallel_safe)]
 fn jsonschema_is_valid(schema: Json) -> bool {
     match jsonschema::JSONSchema::compile(&schema.0) {
         Ok(_) => true,
@@ -29,7 +29,7 @@ fn jsonschema_is_valid(schema: Json) -> bool {
     }
 }
 
-#[pg_extern(immutable, strict)]
+#[pg_extern(immutable, strict, parallel_safe)]
 fn jsonschema_validation_errors(schema: Json, instance: Json) -> Vec<String> {
     let schema = match jsonschema::JSONSchema::compile(&schema.0) {
         Ok(s) => s,
