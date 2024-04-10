@@ -135,8 +135,8 @@ for more complete installation guidelines see the [pgrx](https://github.com/tcdi
 
 #### System
 - 2021 MacBook Pro M1 Max (32GB)
-- macOS 12.4
-- PostgreSQL 14.1
+- macOS 14.2
+- PostgreSQL 16.2
 
 ### Setup
 Validating the following schema on 20k unique inserts
@@ -170,6 +170,6 @@ select
     )
 from
     generate_series(1, 20000) t(i);
--- Query Completed in 2.18 seconds 
+-- Query Completed in 351 ms 
 ```
-for comparison, the equivalent test using postgres-json-schema's `validate_json_schema` function ran in 5.54 seconds. pg_jsonschema's ~2.5x speedup on this example JSON schema grows quickly as the schema becomes more complex.
+for comparison, the equivalent test using postgres-json-schema's `validate_json_schema` function ran in 5.54 seconds. pg_jsonschema's ~15x speedup on this example JSON schema grows quickly as the schema becomes more complex.
