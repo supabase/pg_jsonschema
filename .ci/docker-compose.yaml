@@ -12,4 +12,4 @@ services:
       - cargo
       - pgrx
       - test
-      - pg16
+      - pg17
