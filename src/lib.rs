@@ -152,7 +152,7 @@ mod tests {
             Json(json!({ "maxLength": 4 })),
             Json(json!("foo")),
         );
-        assert!(errors.len() == 0);
+        assert!(errors.is_empty());
     }
 
     #[pg_test]
@@ -162,7 +162,7 @@ mod tests {
             Json(json!("123456789")),
         );
         assert!(errors.len() == 1);
-        assert!(errors[0] == "\"123456789\" is longer than 4 characters".to_string());
+        assert!(errors[0] == *"\"123456789\" is longer than 4 characters");
     }
 
     #[pg_test]
@@ -188,9 +188,9 @@ mod tests {
         );
 
         assert!(errors.len() == 3);
-        assert!(errors[0] == "[] is not of type \"number\"".to_string());
-        assert!(errors[1] == "\"1\" is not of type \"boolean\"".to_string());
-        assert!(errors[2] == "1 is not of type \"string\"".to_string());
+        assert!(errors[0] == *"[] is not of type \"number\"");
+        assert!(errors[1] == *"\"1\" is not of type \"boolean\"");
+        assert!(errors[2] == *"1 is not of type \"string\"");
     }
 }
 
