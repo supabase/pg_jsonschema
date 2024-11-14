@@ -1,4 +1,4 @@
-name: Test
+name: tests
 on:
   pull_request:
   push: { branches: [master] }
@@ -6,14 +6,16 @@ on:
 jobs:
   test:
     name: Run tests
+    strategy:
+      matrix:
+        postgres: [14, 15, 16, 17]
     runs-on: ubuntu-latest
-
     steps:
     - name: Checkout code
       uses: actions/checkout@v3
 
     - name: Build docker images
-      run: docker compose -f .ci/docker-compose.yaml build
+      run: PG_VERSION=${{ matrix.postgres }} docker compose -f .ci/docker-compose.yaml build
 
     - name: Run tests
-      run: docker compose -f .ci/docker-compose.yaml run test_pg_jsonschema
+      run: PG_VERSION=${{ matrix.postgres }} docker compose -f .ci/docker-compose.yaml run test_pg_jsonschema
