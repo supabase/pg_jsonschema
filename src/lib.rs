@@ -14,16 +14,14 @@ fn jsonb_matches_schema(schema: Json, instance: JsonB) -> bool {
 
 #[pg_extern(immutable, strict, parallel_safe)]
 fn jsonschema_is_valid(schema: Json) -> bool {
-    match jsonschema::JSONSchema::compile(&schema.0) {
-        Ok(_) => true,
-        Err(e) => {
-            // Only call notice! for a non empty instance_path
-            if e.instance_path.last().is_some() {
-                notice!(
-                    "Invalid JSON schema at path: {}",
-                    e.instance_path.to_string()
-                );
-            }
+    match jsonschema::meta::try_validate(&schema.0) {
+        Ok(Ok(_)) => true,
+        Ok(Err(err)) => {
+            notice!("Invalid JSON schema at path: {}", err.instance_path);
+            false
+        }
+        Err(err) => {
+            notice!("{err}");
             false
         }
     }
@@ -31,15 +29,14 @@ fn jsonschema_is_valid(schema: Json) -> bool {
 
 #[pg_extern(immutable, strict, parallel_safe)]
 fn jsonschema_validation_errors(schema: Json, instance: Json) -> Vec<String> {
-    let schema = match jsonschema::JSONSchema::compile(&schema.0) {
-        Ok(s) => s,
-        Err(e) => return vec![e.to_string()],
+    let validator = match jsonschema::validator_for(&schema.0) {
+        Ok(v) => v,
+        Err(err) => return vec![err.to_string()],
     };
-    let errors = match schema.validate(&instance.0) {
-        Ok(_) => vec![],
-        Err(e) => e.into_iter().map(|e| e.to_string()).collect(),
-    };
-    errors
+    validator
+        .iter_errors(&instance.0)
+        .map(|err| err.to_string())
+        .collect()
 }
 
 #[pg_schema]
@@ -143,6 +140,13 @@ mod tests {
     fn test_jsonschema_is_not_valid() {
         assert!(!crate::jsonschema_is_valid(Json(json!({
             "type": "obj"
+        }))));
+    }
+
+    #[pg_test]
+    fn test_jsonschema_unknown_specification() {
+        assert!(!crate::jsonschema_is_valid(Json(json!({
+            "$schema": "invalid-uri", "type": "string"
         }))));
     }
 
