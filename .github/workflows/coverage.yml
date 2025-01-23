@@ -44,12 +44,12 @@ jobs:
             strace \
             libssl-dev \
             pkg-config \
-            postgresql-15 \
-            postgresql-server-dev-15
-          sudo chmod a+rwx `/usr/lib/postgresql/15/bin/pg_config --pkglibdir` `/usr/lib/postgresql/15/bin/pg_config --sharedir`/extension /var/run/postgresql/
+            postgresql-16 \
+            postgresql-server-dev-16
+          sudo chmod a+rwx `/usr/lib/postgresql/16/bin/pg_config --pkglibdir` `/usr/lib/postgresql/16/bin/pg_config --sharedir`/extension /var/run/postgresql/
 
       - run: cargo install cargo-pgrx --version 0.12.6
-      - run: cargo pgrx init --pg15 /usr/lib/postgresql/15/bin/pg_config
+      - run: cargo pgrx init --pg16 /usr/lib/postgresql/16/bin/pg_config
 
       - name: Generate code coverage
         id: coverage
