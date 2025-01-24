@@ -46,6 +46,8 @@ jobs:
           cargo pgrx init --pg16=/usr/lib/postgresql/16/bin/pg_config
           cargo install grcov
 
+          sudo chmod a+rw /usr/share/postgresql/16/extension
+
       - name: Generate code coverage
         id: coverage
         run: |
