@@ -17,37 +17,34 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Install Rust toolchain
-        uses: actions-rs/toolchain@v1
-        with:
-          toolchain: 1.81.0
-          components: llvm-tools-preview
-
       - run: |
-          sudo apt remove -y postgres*
-          sudo apt-get install -y wget gnupg
-          sudo sh -c 'echo "deb https://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" > /etc/apt/sources.list.d/pgdg.list'
-          wget --quiet -O - https://www.postgresql.org/media/keys/ACCC4CF8.asc | sudo apt-key add -
-          sudo apt-get update -y -qq --fix-missing
-          sudo apt-get install -y \
-            clang-10 \
-            llvm-10 \
-            clang \
-            gcc \
-            make \
-            build-essential \
-            libz-dev \
-            zlib1g-dev \
-            strace \
-            libssl-dev \
-            pkg-config \
-            postgresql-16 \
-            postgresql-server-dev-16
-          sudo chmod a+rwx `/usr/lib/postgresql/16/bin/pg_config --pkglibdir` `/usr/lib/postgresql/16/bin/pg_config --sharedir`/extension /var/run/postgresql/
+          # Add postgres package repo
+          sudo sh -c 'echo "deb http://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" > /etc/apt/sources.list.d/pgdg.list'
+          wget -qO- https://www.postgresql.org/media/keys/ACCC4CF8.asc | sudo tee /etc/apt/trusted.gpg.d/pgdg.asc &>/dev/null
 
-      - run: cargo install cargo-pgrx --version 0.12.6
-      - run: cargo pgrx init --pg16 /usr/lib/postgresql/16/bin/pg_config
-      - run: cargo install grcov
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends git build-essential libpq-dev curl libreadline6-dev zlib1g-dev pkg-config cmake
+          sudo apt-get install -y --no-install-recommends libreadline-dev zlib1g-dev flex bison libxml2-dev libxslt-dev libssl-dev libxml2-utils xsltproc ccache
+          sudo apt-get install -y --no-install-recommends clang libclang-dev gcc tree
+
+          # Install requested postgres version
+          sudo apt install -y postgresql-16 postgresql-server-dev-16 -y
+
+          # Ensure installed pg_config is first on path
+          export PATH=$PATH:/usr/lib/postgresql/16/bin
+
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --no-modify-path --profile minimal --default-toolchain stable && \
+            rustup --version && \
+            rustc --version && \
+            cargo --version
+
+          # Ensure cargo/rust on path
+          source "$HOME/.cargo/env"
+
+          rustup component add llvm-tools-preview
+          cargo install cargo-pgrx --version 0.12.6 --locked
+          cargo pgrx init --pg16=/usr/lib/postgresql/16/bin/pg_config
+          cargo install grcov
 
       - name: Generate code coverage
         id: coverage
