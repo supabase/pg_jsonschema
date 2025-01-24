@@ -1,0 +1,63 @@
+name: Code Coverage
+
+on:
+  pull_request:
+  push:
+    branches:
+      - master
+
+permissions:
+  contents: write
+
+jobs:
+  code-coverage:
+    name: Code Coverage
+    runs-on: ubuntu-20.04
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - run: |
+          # Add postgres package repo
+          sudo sh -c 'echo "deb http://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" > /etc/apt/sources.list.d/pgdg.list'
+          wget -qO- https://www.postgresql.org/media/keys/ACCC4CF8.asc | sudo tee /etc/apt/trusted.gpg.d/pgdg.asc &>/dev/null
+
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends git build-essential libpq-dev curl libreadline6-dev zlib1g-dev pkg-config cmake
+          sudo apt-get install -y --no-install-recommends libreadline-dev zlib1g-dev flex bison libxml2-dev libxslt-dev libssl-dev libxml2-utils xsltproc ccache
+          sudo apt-get install -y --no-install-recommends clang libclang-dev gcc tree
+
+          # Install requested postgres version
+          sudo apt install -y postgresql-16 postgresql-server-dev-16 -y
+
+          # Ensure installed pg_config is first on path
+          export PATH=$PATH:/usr/lib/postgresql/16/bin
+
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --no-modify-path --profile minimal --default-toolchain stable && \
+            rustup --version && \
+            rustc --version && \
+            cargo --version
+
+          # Ensure cargo/rust on path
+          source "$HOME/.cargo/env"
+
+          rustup component add llvm-tools-preview
+          cargo install cargo-pgrx --version 0.12.6 --locked
+          cargo pgrx init --pg16=/usr/lib/postgresql/16/bin/pg_config
+          cargo install grcov
+
+          sudo chmod a+rw /usr/share/postgresql/16/extension
+          sudo chmod a+rw /usr/lib/postgresql/16/lib/
+
+      - name: Generate code coverage
+        id: coverage
+        run: |
+          CARGO_INCREMENTAL=0 RUSTFLAGS='-Clink-args=-Wl,-undefined,dynamic_lookup -Cinstrument-coverage' LLVM_PROFILE_FILE='cargo-test-%p-%m.profraw' cargo test
+          grcov . --binary-path ./target/debug/libpg_jsonschema.so --source-dir . --branch --ignore-not-existing --keep-only 'src/**' --output-type lcov --output-path lcov.info
+
+      - name: Coveralls upload
+        uses: coverallsapp/github-action@v2
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path-to-lcov: lcov.info
+          debug: true
