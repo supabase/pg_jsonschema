@@ -23,9 +23,6 @@ jobs:
           toolchain: 1.81.0
           components: llvm-tools-preview
 
-      - name: Install cargo-llvm-cov
-        uses: taiki-e/install-action@cargo-llvm-cov
-
       - run: |
           sudo apt remove -y postgres*
           sudo apt-get install -y wget gnupg
@@ -50,11 +47,13 @@ jobs:
 
       - run: cargo install cargo-pgrx --version 0.12.6
       - run: cargo pgrx init --pg16 /usr/lib/postgresql/16/bin/pg_config
+      - run: cargo install grcov
 
       - name: Generate code coverage
         id: coverage
         run: |
-          cargo llvm-cov test --workspace --no-fail-fast --lcov --output-path lcov.info
+          CARGO_INCREMENTAL=0 RUSTFLAGS='-Clink-args=-Wl,-undefined,dynamic_lookup -Cinstrument-coverage' LLVM_PROFILE_FILE='cargo-test-%p-%m.profraw' cargo test
+          grcov . --binary-path ./target/debug/deps/ -s . -t lcov --branch --ignore-not-existing --ignore '../*' --ignore "/*" -o lcov.info
 
       - name: Coveralls upload
         uses: coverallsapp/github-action@v2
