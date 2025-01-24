@@ -53,7 +53,7 @@ jobs:
         id: coverage
         run: |
           CARGO_INCREMENTAL=0 RUSTFLAGS='-Clink-args=-Wl,-undefined,dynamic_lookup -Cinstrument-coverage' LLVM_PROFILE_FILE='cargo-test-%p-%m.profraw' cargo test
-          grcov . --binary-path ./target/debug/libpg_jsonschema.dylib --source-dir . --branch --ignore-not-existing --keep-only 'src/**' --output-type lcov --output-path lcov.info
+          grcov . --binary-path ./target/debug/libpg_jsonschema.so --source-dir . --branch --ignore-not-existing --keep-only 'src/**' --output-type lcov --output-path lcov.info
 
       - name: Coveralls upload
         uses: coverallsapp/github-action@v2
