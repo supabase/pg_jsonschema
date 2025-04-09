@@ -7,6 +7,9 @@ on:
     tags:
       - 'v*' # Push events to matching v*, i.e. v1.0, v20.15.10
 
+permissions:
+  contents: write # Required to upload release assets
+
 jobs:
   release:
     name: Create Release
@@ -110,7 +113,7 @@ jobs:
           cd ../../../../../..
 
           # Create install control file
-          extension_version=${{ github.ref_name }}
+          extension_version="${{ github.ref_name }}"
           # strip the leading v
           deb_version=${extension_version:1}
 
