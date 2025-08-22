@@ -42,7 +42,7 @@ jobs:
           source "$HOME/.cargo/env"
 
           rustup component add llvm-tools-preview
-          cargo install cargo-pgrx --version 0.12.9 --locked
+          cargo install cargo-pgrx --version 0.16.0 --locked
           cargo pgrx init --pg16=/usr/lib/postgresql/16/bin/pg_config
           cargo install grcov
 
