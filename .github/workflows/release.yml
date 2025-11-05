@@ -43,7 +43,7 @@ jobs:
           - pg-jsonschema
         pgrx_version:
           - 0.16.1
-        postgres: [14, 15, 16, 17]
+        postgres: [14, 15, 16, 17, 18]
         box:
           - { runner: ubuntu-latest, arch: amd64 }
           - { runner: arm-runner, arch: arm64 }
