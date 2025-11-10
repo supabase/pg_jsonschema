@@ -42,8 +42,8 @@ jobs:
         package_name:
           - pg-jsonschema
         pgrx_version:
-          - 0.16.0
-        postgres: [14, 15, 16, 17]
+          - 0.16.1
+        postgres: [14, 15, 16, 17, 18]
         box:
           - { runner: ubuntu-latest, arch: amd64 }
           - { runner: arm-runner, arch: arm64 }
@@ -67,7 +67,7 @@ jobs:
           sudo apt install -y postgresql-${{ matrix.postgres }} postgresql-server-dev-${{ matrix.postgres }} -y
 
           # Ensure installed pg_config is first on path
-          export PATH=$PATH:/usr/lib/postgresql/${{ matrix.postgres }}/bin
+          export PATH=/usr/lib/postgresql/${{ matrix.postgres }}/bin:$PATH
 
           curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --no-modify-path --profile minimal --default-toolchain stable && \
             rustup --version && \
