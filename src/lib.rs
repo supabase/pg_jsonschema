@@ -65,6 +65,14 @@ mod tests {
             Json(json!({ "type": "number", "multipleOf": 0.1 })),
             Json(json!(17.2)),
         ));
+        assert!(crate::json_matches_schema(
+            Json(json!({ "type": "number", "multipleOf": 0.2 })),
+            Json(json!(17.2)),
+        ));
+        assert!(!crate::json_matches_schema(
+            Json(json!({ "type": "number", "multipleOf": 0.3 })),
+            Json(json!(17.2)),
+        ));
     }
 
     #[pg_test]
