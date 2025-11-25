@@ -41,7 +41,7 @@ jsonschema_is_valid(schema json) returns bool
 ```
 and
 ```sql
--- Validates whether a json *schema* is valid
+-- Returns an array of errors if a *schema* is invalid
 jsonschema_validation_errors(schema json, instance json) returns text[]
 ```
 
