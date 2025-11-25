@@ -14,14 +14,10 @@ fn jsonb_matches_schema(schema: Json, instance: JsonB) -> bool {
 
 #[pg_extern(immutable, strict, parallel_safe)]
 fn jsonschema_is_valid(schema: Json) -> bool {
-    match jsonschema::meta::try_validate(&schema.0) {
-        Ok(Ok(_)) => true,
-        Ok(Err(err)) => {
-            notice!("Invalid JSON schema at path: {}", err.instance_path);
-            false
-        }
+    match jsonschema::meta::validate(&schema.0) {
+        Ok(_) => true,
         Err(err) => {
-            notice!("{err}");
+            notice!("Invalid JSON schema at path: {}", err.instance_path());
             false
         }
     }
@@ -60,6 +56,22 @@ mod tests {
         assert!(!crate::json_matches_schema(
             Json(json!({ "maxLength": max_length })),
             Json(json!("foobar")),
+        ));
+    }
+
+    #[pg_test]
+    fn test_json_matches_schema_arbitrary_precision() {
+        assert!(crate::json_matches_schema(
+            Json(json!({ "type": "number", "multipleOf": 0.1 })),
+            Json(json!(17.2)),
+        ));
+        assert!(crate::json_matches_schema(
+            Json(json!({ "type": "number", "multipleOf": 0.2 })),
+            Json(json!(17.2)),
+        ));
+        assert!(!crate::json_matches_schema(
+            Json(json!({ "type": "number", "multipleOf": 0.3 })),
+            Json(json!(17.2)),
         ));
     }
 
