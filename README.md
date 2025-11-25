@@ -18,10 +18,11 @@
 
 
 ## API
-Three SQL functions:
+This extension exposes the following four SQL functions:
 - json_matches_schema
 - jsonb_matches_schema (note the **jsonb** in front)
 - jsonschema_is_valid
+- jsonschema_validation_errors
 
 With the following signatures
 ```sql
@@ -37,6 +38,11 @@ and
 ```sql
 -- Validates whether a json *schema* is valid
 jsonschema_is_valid(schema json) returns bool
+```
+and
+```sql
+-- Validates whether a json *schema* is valid
+jsonschema_validation_errors(schema json, instance json) returns text[]
 ```
 
 ## Usage
@@ -81,6 +87,11 @@ values ('{"tags": [1, 3]}');
 -- Result:
 --   ERROR:  new row for relation "customer" violates check constraint "customer_metadata_check"
 --   DETAIL:  Failing row contains (2, {"tags": [1, 3]}).
+
+-- Example: jsonschema_validation_errors
+select jsonschema_validation_errors('{"maxLength": 4}', '"123456789"');
+-- Result:
+--   ERROR: {"\"123456789\" is longer than 4 characters"}
 ```
 
 ## JSON Schema Support
