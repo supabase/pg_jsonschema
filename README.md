@@ -91,7 +91,7 @@ values ('{"tags": [1, 3]}');
 -- Example: jsonschema_validation_errors
 select jsonschema_validation_errors('{"maxLength": 4}', '"123456789"');
 -- Result:
---   ERROR: {"\"123456789\" is longer than 4 characters"}
+--   ERROR: "123456789" is longer than 4 characters
 ```
 
 ## JSON Schema Support
