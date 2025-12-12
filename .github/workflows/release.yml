@@ -10,31 +10,8 @@ permissions:
   contents: write # Required to upload release assets
 
 jobs:
-  release:
-    name: Create Release
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v2
-      - name: Create Release
-        id: create_release
-        uses: actions/create-release@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          tag_name: ${{ github.ref }}
-          release_name: ${{ github.ref }}
-          body: |
-            Changes in this Release
-            - First Change
-            - Second Change
-          draft: false
-          prerelease: false
-
   build-linux-gnu:
     name: release artifacts
-    needs:
-      - release
     strategy:
       matrix:
         extension_name:
@@ -46,13 +23,14 @@ jobs:
         postgres: [14, 15, 16, 17, 18]
         box:
           - { runner: ubuntu-latest, arch: amd64 }
-          - { runner: arm-runner, arch: arm64 }
+          - { runner: ubuntu-24.04-arm, arch: arm64 }
     runs-on: ${{ matrix.box.runner }}
     timeout-minutes: 90
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v6
 
-      - name: build release artifacts
+      - id: build
+        name: build release artifacts
         run: |
           # Add postgres package repo
           sudo sh -c 'echo "deb http://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" > /etc/apt/sources.list.d/pgdg.list'
@@ -129,15 +107,30 @@ jobs:
           sudo chmod -R 00755 ${package_dir}
           sudo dpkg-deb --build --root-owner-group ${package_dir}
 
-      - name: Get upload url
-        run: echo UPLOAD_URL=$(curl --silent https://api.github.com/repos/${{ github.repository }}/releases/latest | jq .upload_url --raw-output) >> $GITHUB_ENV
+          echo "artifact=${package_dir}.deb" >> "$GITHUB_OUTPUT"
 
-      - name: Upload release asset
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Upload release artifact
+        uses: actions/upload-artifact@v4
         with:
-          upload_url: ${{ env.UPLOAD_URL }}
-          asset_path: ./${{ matrix.extension_name }}-${{ github.ref_name }}-pg${{ matrix.postgres }}-${{ matrix.box.arch }}-linux-gnu.deb
-          asset_name: ${{ matrix.extension_name }}-${{ github.ref_name }}-pg${{ matrix.postgres }}-${{ matrix.box.arch }}-linux-gnu.deb
-          asset_content_type: application/vnd.debian.binary-package
+          name: ${{ steps.build.outputs.artifact }}
+          path: ${{ steps.build.outputs.artifact }}
+          if-no-files-found: error
+
+  release:
+    name: Create Release
+    needs: [build-linux-gnu]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+      - name: Download release artifacts
+        uses: actions/download-artifact@v5
+        with:
+          merge-multiple: true
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          draft: false
+          prerelease: false
+          files: pg_jsonschema*.deb
