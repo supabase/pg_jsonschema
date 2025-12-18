@@ -70,24 +70,11 @@ jobs:
           package_dir=${{ matrix.extension_name }}-${{ github.ref_name }}-pg${{ matrix.postgres }}-${{ matrix.box.arch }}-linux-gnu
 
           # Copy files into directory structure
-          mkdir -p ${package_dir}/usr/lib/postgresql/lib
-          mkdir -p ${package_dir}/var/lib/postgresql/extension
-          cp archive/*.so ${package_dir}/usr/lib/postgresql/lib
-          cp archive/*.control ${package_dir}/var/lib/postgresql/extension
-          cp archive/*.sql ${package_dir}/var/lib/postgresql/extension
-
-          # symlinks to Copy files into directory structure
-          mkdir -p ${package_dir}/usr/lib/postgresql/${{ matrix.postgres }}/lib
-          cd ${package_dir}/usr/lib/postgresql/${{ matrix.postgres }}/lib
-          cp -s ../../lib/*.so .
-          cd ../../../../../..
-
-          mkdir -p ${package_dir}/usr/share/postgresql/${{ matrix.postgres }}/extension
-          cd ${package_dir}/usr/share/postgresql/${{ matrix.postgres }}/extension
-
-          cp -s ../../../../../var/lib/postgresql/extension/${{ matrix.extension_name }}.control .
-          cp -s ../../../../../var/lib/postgresql/extension/${{ matrix.extension_name }}*.sql .
-          cd ../../../../../..
+          extension_dir="${package_dir}$(pg_config --sharedir)/extension"
+          lib_dir="${package_dir}$(pg_config --pkglibdir)"
+          mkdir -p "$extension_dir" "$lib_dir"
+          cp archive/*.so "$lib_dir"
+          cp archive/*.control archive/*.sql "$extension_dir"
 
           # Create install control file
           extension_version="${{ github.ref_name }}"
@@ -96,7 +83,7 @@ jobs:
 
           mkdir -p ${package_dir}/DEBIAN
           touch ${package_dir}/DEBIAN/control
-          echo 'Package: ${{ matrix.package_name }}' >> ${package_dir}/DEBIAN/control
+          echo 'Package: ${{ matrix.package_name }}-postgresql-${{ matrix.postgres }}' >> ${package_dir}/DEBIAN/control
           echo 'Version:' ${deb_version} >> ${package_dir}/DEBIAN/control
           echo 'Architecture: ${{ matrix.box.arch }}' >> ${package_dir}/DEBIAN/control
           echo 'Maintainer: supabase' >> ${package_dir}/DEBIAN/control
