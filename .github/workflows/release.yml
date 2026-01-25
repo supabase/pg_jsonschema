@@ -97,7 +97,7 @@ jobs:
           echo "artifact=${package_dir}.deb" >> "$GITHUB_OUTPUT"
 
       - name: Upload release artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: ${{ steps.build.outputs.artifact }}
           path: ${{ steps.build.outputs.artifact }}
@@ -111,7 +111,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v6
       - name: Download release artifacts
-        uses: actions/download-artifact@v5
+        uses: actions/download-artifact@v7
         with:
           merge-multiple: true
       - name: Create Release
