@@ -1,46 +1,46 @@
 {
-   "name": "pg_jsonschema",
-   "abstract": "PostgreSQL extension providing JSON Schema validation",
-   "description": "pg_jsonschema is a PostgreSQL extension adding support for JSON schema validation on json and jsonb data types.",
-   "version": "0.3.1",
-   "maintainer": [
-      "Oliver Rice <github@oliverrice.com>"
-   ],
-   "license": "apache_2_0",
-   "provides": {
-      "pg_jsonschema": {
-         "abstract": "PostgreSQL extension providing JSON Schema validation",
-         "file": "pg_jsonschema.control",
-         "docfile": "README.md",
-         "version": "0.3.1"
+  "name": "pg_jsonschema",
+  "abstract": "PostgreSQL extension providing JSON Schema validation",
+  "description": "pg_jsonschema is a PostgreSQL extension adding support for JSON schema validation on json and jsonb data types.",
+  "version": "0.3.4",
+  "maintainer": [
+    "Oliver Rice <github@oliverrice.com>"
+  ],
+  "license": "apache_2_0",
+  "provides": {
+    "pg_jsonschema": {
+      "abstract": "PostgreSQL extension providing JSON Schema validation",
+      "file": "pg_jsonschema.control",
+      "docfile": "README.md",
+      "version": "0.3.4"
+    }
+  },
+  "prereqs": {
+    "runtime": {
+      "requires": {
+        "PostgreSQL": "12.0.0"
       }
-   },
-   "prereqs": {
-      "runtime": {
-         "requires": {
-            "PostgreSQL": "12.0.0"
-         }
-      }
-   },
-   "resources": {
-      "bugtracker": {
-         "web": "https://github.com/supabase/pg_jsonschema/issues/"
-      },
-      "repository": {
-         "url": "git://github.com/supabase/pg_jsonschema.git",
-         "web": "https://github.com/supabase/pg_jsonschema/",
-         "type": "git"
-      }
-   },
-   "generated_by": "David E. Wheeler",
-   "meta-spec": {
-      "version": "1.0.0",
-      "url": "https://pgxn.org/meta/spec.txt"
-   },
-   "tags": [
-      "jsonschema",
-      "validation",
-      "json",
-      "jsonb"
-   ]
+    }
+  },
+  "resources": {
+    "bugtracker": {
+      "web": "https://github.com/supabase/pg_jsonschema/issues/"
+    },
+    "repository": {
+      "url": "git://github.com/supabase/pg_jsonschema.git",
+      "web": "https://github.com/supabase/pg_jsonschema/",
+      "type": "git"
+    }
+  },
+  "generated_by": "David E. Wheeler",
+  "meta-spec": {
+    "version": "1.0.0",
+    "url": "https://pgxn.org/meta/spec.txt"
+  },
+  "tags": [
+    "jsonschema",
+    "validation",
+    "json",
+    "jsonb"
+  ]
 }
