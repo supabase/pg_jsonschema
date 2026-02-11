@@ -16,39 +16,49 @@
 
 `pg_jsonschema` is a PostgreSQL extension adding support for [JSON schema](https://json-schema.org/) validation on `json` and `jsonb` data types.
 
-
 ## API
+
 This extension exposes the following four SQL functions:
+
 - json_matches_schema
 - jsonb_matches_schema (note the **jsonb** in front)
 - jsonschema_is_valid
 - jsonschema_validation_errors
 
 With the following signatures
+
 ```sql
 -- Validates a json *instance* against a *schema*
 json_matches_schema(schema json, instance json) returns bool
 ```
+
 and
+
 ```sql
 -- Validates a jsonb *instance* against a *schema*
 jsonb_matches_schema(schema json, instance jsonb) returns bool
 ```
+
 and
+
 ```sql
 -- Validates whether a json *schema* is valid
 jsonschema_is_valid(schema json) returns bool
 ```
+
 and
+
 ```sql
 -- Returns an array of errors if a *schema* is invalid
 jsonschema_validation_errors(schema json, instance json) returns text[]
 ```
 
 ## Usage
+
 Those functions can be used to constrain `json` and `jsonb` columns to conform to a schema.
 
 For example:
+
 ```sql
 create extension pg_jsonschema;
 
@@ -102,19 +112,18 @@ pg_jsonschema is a (very) thin wrapper around the [jsonschema](https://docs.rs/j
 
 Spin up Postgres with pg_jsonschema installed in a docker container via `docker-compose up`. The database is available at `postgresql://postgres:password@localhost:5407/app`
 
-
 ## Installation
 
-
 Requires:
-- [pgrx](https://github.com/tcdi/pgrx)
 
+- [pgrx](https://github.com/tcdi/pgrx)
 
 ```shell
 cargo pgrx run
 ```
 
 which drops into a psql prompt.
+
 ```psql
 psql (13.6)
 Type "help" for help.
@@ -123,7 +132,7 @@ pg_jsonschema=# create extension pg_jsonschema;
 CREATE EXTENSION
 
 pg_jsonschema=# select json_matches_schema('{"type": "object"}', '{}');
- json_matches_schema 
+ json_matches_schema
 ---------------------
  t
 (1 row)
@@ -131,6 +140,45 @@ pg_jsonschema=# select json_matches_schema('{"type": "object"}', '{}');
 
 for more complete installation guidelines see the [pgrx](https://github.com/tcdi/pgrx) docs.
 
+## Releasing
+
+Releases are automated via a single command:
+
+```shell
+./scripts/release.sh <major.minor.patch>
+```
+
+For example:
+
+```shell
+./scripts/release.sh 0.4.0
+```
+
+This orchestrates the full release process end-to-end:
+
+1. **Verifies** that the tag and GitHub release don't already exist
+2. **Updates versions** in `Cargo.toml`, `META.json`, and `Cargo.lock`; creates a `release/<version>` branch; commits, pushes, and waits for the PR to be merged into `master`
+3. **Verifies** all file versions match before tagging
+4. **Creates and pushes** the `v<version>` tag, which triggers the CI workflows (`release.yml` for GitHub release + `.deb` artifacts, `pgxn-release.yml` for PGXN)
+5. **Polls** GitHub until the release is published and prints the release URL
+
+> **Note:** `pg_jsonschema.control` uses `@CARGO_VERSION@` which is substituted by pgrx at build time from `Cargo.toml`, so it doesn't need manual updates.
+
+### Idempotency
+
+The script is safe to re-run if interrupted — it detects what has already been completed (branch exists, tag exists, release exists) and picks up where it left off.
+
+### Individual Scripts
+
+The release process is composed of smaller scripts that can also be run independently:
+
+| Script                                             | Purpose                                                                 |
+| -------------------------------------------------- | ----------------------------------------------------------------------- |
+| `scripts/check-version.sh <version>`               | Checks if `Cargo.toml` and `META.json` match the given version          |
+| `scripts/update-version.sh <version>`              | Updates version files, creates a release branch, and waits for PR merge |
+| `scripts/update-version.sh --files-only <version>` | Updates version files without any git operations                        |
+| `scripts/push-tag.sh <version>`                    | Creates and pushes the git tag, then monitors for the GitHub release    |
+| `scripts/push-tag.sh --dry-run <version>`          | Validates versions without creating a tag                               |
 
 ## Prior Art
 
@@ -140,25 +188,25 @@ for more complete installation guidelines see the [pgrx](https://github.com/tcdi
 
 [pgx_json_schema](https://github.com/jefbarn/pgx_json_schema) - JSON Schema Postgres extension written with pgrx + jsonschema
 
-
 ## Benchmark
 
-
 #### System
+
 - 2021 MacBook Pro M1 Max (32GB)
 - macOS 14.2
 - PostgreSQL 16.2
 
 ### Setup
+
 Validating the following schema on 20k unique inserts
 
 ```json
 {
-    "type": "object",
-    "properties": {
-        "a": {"type": "number"},
-        "b": {"type": "string"}
-    }
+  "type": "object",
+  "properties": {
+    "a": { "type": "number" },
+    "b": { "type": "string" }
+  }
 }
 ```
 
@@ -181,6 +229,7 @@ select
     )
 from
     generate_series(1, 20000) t(i);
--- Query Completed in 351 ms 
+-- Query Completed in 351 ms
 ```
+
 for comparison, the equivalent test using postgres-json-schema's `validate_json_schema` function ran in 5.54 seconds. pg_jsonschema's ~15x speedup on this example JSON schema grows quickly as the schema becomes more complex.
