@@ -53,6 +53,24 @@ and
 jsonschema_validation_errors(schema json, instance json) returns text[]
 ```
 
+### Compiled schema type
+
+For repeated validation against the same schema, cast it to `jsonschema` once. The validator is compiled and cached per callsite, avoiding recompilation on every row.
+
+```sql
+-- Validates a json instance against a pre-compiled schema
+json_matches_compiled_schema(schema jsonschema, instance json) returns bool
+
+-- Validates a jsonb instance against a pre-compiled schema
+jsonb_matches_compiled_schema(schema jsonschema, instance jsonb) returns bool
+
+-- Returns validation errors for a json instance
+jsonschema_validation_errors_compiled(schema jsonschema, instance json) returns text[]
+
+-- Returns validation errors for a jsonb instance
+jsonb_validation_errors_compiled(schema jsonschema, instance jsonb) returns text[]
+```
+
 ## Usage
 
 Those functions can be used to constrain `json` and `jsonb` columns to conform to a schema.
@@ -192,9 +210,9 @@ The release process is composed of smaller scripts that can also be run independ
 
 #### System
 
-- 2021 MacBook Pro M1 Max (32GB)
-- macOS 14.2
-- PostgreSQL 16.2
+- 2024 MacBook Pro M4 Max (64GB)
+- macOS 26.3.1
+- PostgreSQL 16.13
 
 ### Setup
 
@@ -229,7 +247,18 @@ select
     )
 from
     generate_series(1, 20000) t(i);
--- Query Completed in 351 ms
+-- Query Completed in 195 ms
 ```
 
-for comparison, the equivalent test using postgres-json-schema's `validate_json_schema` function ran in 5.54 seconds. pg_jsonschema's ~15x speedup on this example JSON schema grows quickly as the schema becomes more complex.
+for comparison, the equivalent test using postgres-json-schema's `validate_json_schema` function ran in 2.0 seconds. pg_jsonschema's ~10x speedup on this example JSON schema grows quickly as the schema becomes more complex.
+
+### Compiled schema type
+
+Using the same schema and 20k inserts:
+
+| Method | 20k inserts |
+| ------ | ----------- |
+| `jsonb_matches_schema` — recompiles every row | ~195 ms |
+| `jsonb_matches_compiled_schema` — compiled once, cached | ~110 ms |
+
+~1.8x speedup; the gain grows with schema complexity since compilation cost is paid only once per callsite.
