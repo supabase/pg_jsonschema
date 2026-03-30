@@ -15,7 +15,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
       - run: |
           # Add postgres package repo
@@ -56,7 +56,7 @@ jobs:
           grcov . --binary-path ./target/debug/libpg_jsonschema.so --source-dir . --branch --ignore-not-existing --keep-only 'src/**' --output-type lcov --output-path lcov.info
 
       - name: Coveralls upload
-        uses: coverallsapp/github-action@v2
+        uses: coverallsapp/github-action@5cbfd81b66ca5d10c19b062c04de0199c215fb6e # v2.3.7
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           path-to-lcov: lcov.info
