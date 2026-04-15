@@ -24,9 +24,10 @@ pg_test = []
 pgrx = "0.16.1"
 serde = "1.0"
 serde_json = "1.0"
-jsonschema = { version = "0.37.1", default-features = false, features = [
+jsonschema = { version = "0.46.0", default-features = false, features = [
     "arbitrary-precision",
 ] }
+lru = { version = "0.16", default-features = false }
 
 [dev-dependencies]
 pgrx-tests = "0.16.1"
