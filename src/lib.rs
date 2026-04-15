@@ -81,13 +81,8 @@ fn jsonb_matches_compiled_schema(
     validator.is_valid(&instance.0)
 }
 
-#[pg_extern(
-    immutable,
-    strict,
-    parallel_safe,
-    name = "jsonschema_validation_errors_compiled"
-)]
-fn jsonschema_validation_errors_compiled(
+#[pg_extern(immutable, strict, parallel_safe)]
+fn json_validation_errors_compiled(
     schema: JsonSchema,
     instance: Json,
     fcinfo: pg_sys::FunctionCallInfo,
@@ -99,13 +94,8 @@ fn jsonschema_validation_errors_compiled(
         .collect()
 }
 
-#[pg_extern(
-    immutable,
-    strict,
-    parallel_safe,
-    name = "jsonb_validation_errors_compiled"
-)]
-fn jsonschema_validation_errors_compiled_jsonb(
+#[pg_extern(immutable, strict, parallel_safe)]
+fn jsonb_validation_errors_compiled(
     schema: JsonSchema,
     instance: pgrx::JsonB,
     fcinfo: pg_sys::FunctionCallInfo,
@@ -146,7 +136,7 @@ mod tests {
             #[pg_test]
             fn $name() {
                 let errors = Spi::get_one::<Vec<String>>(concat!(
-                    "SELECT jsonschema_validation_errors_compiled('", $schema, "'::jsonschema, '",
+                    "SELECT json_validation_errors_compiled('", $schema, "'::jsonschema, '",
                     $instance, "'::json)"
                 )).unwrap().unwrap();
                 assert_eq!(errors, [$($err),*]);
@@ -219,7 +209,7 @@ mod tests {
     #[pg_test]
     fn test_validation_errors_compiled_no_errors() {
         let errors = Spi::get_one::<Vec<String>>(
-            r#"SELECT jsonschema_validation_errors_compiled('{"maxLength":4}'::jsonschema, '"foo"'::json)"#,
+            r#"SELECT json_validation_errors_compiled('{"maxLength":4}'::jsonschema, '"foo"'::json)"#,
         )
         .unwrap()
         .unwrap();
@@ -230,7 +220,7 @@ mod tests {
     fn test_validation_errors_compiled_multiple() {
         let errors = Spi::get_one::<Vec<String>>(
             r#"
-            SELECT jsonschema_validation_errors_compiled(
+            SELECT json_validation_errors_compiled(
                 '{
                     "type":"object",
                     "properties":{
