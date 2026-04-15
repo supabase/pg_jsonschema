@@ -111,12 +111,12 @@ pub(crate) unsafe fn fn_extra_get_or_compile(
                 },
             },
         );
+        (*flinfo).fn_extra = cache_ptr as *mut std::ffi::c_void;
         pg_sys::MemoryContextRegisterResetCallback(
             fn_mcxt,
             std::ptr::addr_of_mut!((*cache_ptr).callback),
         );
         pg_sys::MemoryContextSwitchTo(old_mcxt);
-        (*flinfo).fn_extra = cache_ptr as *mut std::ffi::c_void;
 
         validator
     }
