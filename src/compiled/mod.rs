@@ -41,10 +41,8 @@ impl JsonSchema {
 
 impl pgrx::inoutfuncs::InOutFuncs for JsonSchema {
     fn input(input: &CStr) -> Self {
-        let value: Value = match serde_json::from_slice(input.to_bytes()) {
-            Ok(v) => v,
-            Err(err) => pgrx::error!("invalid JSON: {err}"),
-        };
+        let value: Value = serde_json::from_slice(input.to_bytes())
+            .unwrap_or_else(|err| pgrx::error!("invalid JSON: {err}"));
         Self::compile(value)
     }
 
