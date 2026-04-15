@@ -72,7 +72,6 @@ pub(crate) unsafe fn fn_extra_get_or_compile(
         if let Some(cached_ptr) = cached_ptr {
             let cached = &mut *cached_ptr;
             let validator = get_or_compile(schema);
-            let cached_ptr = cached as *mut FnExtraCache;
             let next = cached.callback.next;
             let old_entry = std::mem::replace(
                 cached,
