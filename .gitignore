@@ -5,3 +5,6 @@
 **/*.rs.bk
 *.swp
 pg_jsonschema-*
+
+# The line above is too broad, but this will allow the SQL files matched by it to not be ignored
+!/sql/*.sql
