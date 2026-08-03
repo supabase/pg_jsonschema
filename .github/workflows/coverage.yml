@@ -42,9 +42,9 @@ jobs:
           source "$HOME/.cargo/env"
 
           rustup component add llvm-tools-preview
-          cargo install cargo-pgrx --version 0.16.1 --locked
+          cargo install cargo-pgrx --version 0.19.2 --locked
           cargo pgrx init --pg16=/usr/lib/postgresql/16/bin/pg_config
-          cargo install grcov
+          cargo install cargo-llvm-cov
 
           sudo chmod a+rw /usr/share/postgresql/16/extension
           sudo chmod a+rw /usr/lib/postgresql/16/lib/
@@ -52,8 +52,11 @@ jobs:
       - name: Generate code coverage
         id: coverage
         run: |
-          CARGO_INCREMENTAL=0 RUSTFLAGS='-Clink-args=-Wl,-undefined,dynamic_lookup -Cinstrument-coverage' LLVM_PROFILE_FILE='cargo-test-%p-%m.profraw' cargo test
-          grcov . --binary-path ./target/debug/libpg_jsonschema.so --source-dir . --branch --ignore-not-existing --keep-only 'src/**' --output-type lcov --output-path lcov.info
+          source <(cargo llvm-cov show-env --sh)
+          export RUSTFLAGS="$RUSTFLAGS -Clink-args=-Wl,-undefined,dynamic_lookup"
+          cargo llvm-cov clean --workspace
+          cargo test
+          cargo llvm-cov report --lcov --output-path lcov.info
 
       - name: Coveralls upload
         uses: coverallsapp/github-action@5cbfd81b66ca5d10c19b062c04de0199c215fb6e # v2.3.7
