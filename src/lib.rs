@@ -107,6 +107,102 @@ fn jsonb_validation_errors_compiled(
         .collect()
 }
 
+#[pg_extern(immutable, strict, parallel_safe)]
+fn jsonb_validation_errors_detailed(
+    schema: JsonSchema,
+    instance: pgrx::JsonB,
+    fcinfo: pg_sys::FunctionCallInfo,
+) -> pgrx::JsonB {
+    let validator = unsafe { fn_extra_get_or_compile(&schema, fcinfo) };
+    let schema_value: Option<serde_json::Value> = serde_json::from_str(&schema.value).ok();
+
+    let errors: Vec<serde_json::Value> = validator
+        .iter_errors(&instance.0)
+        .map(|err| build_error_object(&err, schema_value.as_ref()))
+        .collect();
+    pgrx::JsonB(serde_json::Value::Array(errors))
+}
+
+fn build_error_object(
+    err: &jsonschema::ValidationError,
+    schema: Option<&serde_json::Value>,
+) -> serde_json::Value {
+    let mut obj = serde_json::Map::new();
+    obj.insert(
+        "fieldPath".into(),
+        serde_json::Value::String(field_path_for(err)),
+    );
+    obj.insert(
+        "failedConstraint".into(),
+        serde_json::Value::String(failed_constraint(err)),
+    );
+    if let Some(custom) = pattern_error_message(err, schema) {
+        obj.insert("patternError".into(), serde_json::Value::String(custom));
+    }
+    obj.insert(
+        "message".into(),
+        serde_json::Value::String(err.to_string()),
+    );
+    serde_json::Value::Object(obj)
+}
+
+fn failed_constraint(err: &jsonschema::ValidationError) -> String {
+    let schema_path = err.schema_path().to_string();
+    schema_path
+        .rsplit('/')
+        .find(|s| !s.is_empty())
+        .map(|s| s.replace("~1", "/").replace("~0", "~"))
+        .unwrap_or_else(|| "<unknown>".into())
+}
+
+fn pattern_error_message(
+    err: &jsonschema::ValidationError,
+    schema: Option<&serde_json::Value>,
+) -> Option<String> {
+    let schema = schema?;
+    let path = err.schema_path().to_string();
+    let parent_path = path.strip_suffix("/pattern")?;
+    schema
+        .pointer(parent_path)?
+        .get("patternError")?
+        .as_str()
+        .map(String::from)
+}
+
+fn field_path_for(err: &jsonschema::ValidationError) -> String {
+    let base = pointer_to_dotted(&err.instance_path().to_string());
+
+    let appended: Option<&str> = match err.kind() {
+        jsonschema::error::ValidationErrorKind::Required { property } => property.as_str(),
+        jsonschema::error::ValidationErrorKind::AdditionalProperties { unexpected } => {
+            unexpected.first().map(|s| s.as_str())
+        }
+        _ => None,
+    };
+
+    if let Some(name) = appended {
+        return if base.is_empty() {
+            name.to_string()
+        } else {
+            format!("{base}.{name}")
+        };
+    }
+
+    base
+}
+
+fn pointer_to_dotted(pointer: &str) -> String {
+    if pointer.is_empty() {
+        return String::new();
+    }
+    pointer
+        .trim_start_matches('/')
+        .split('/')
+        .map(|seg| seg.replace("~1", "/").replace("~0", "~"))
+        .collect::<Vec<_>>()
+        .join(".")
+}
+
 #[pg_schema]
 #[cfg(any(test, feature = "pg_test"))]
 mod tests {
@@ -245,6 +341,364 @@ mod tests {
                 r#"[] is not of type "number""#.to_string(),
             ]
         );
+    }
+
+    #[pg_test]
+    fn test_jsonb_validation_errors_detailed_nested_path() {
+        let result = Spi::get_one::<pgrx::JsonB>(
+            r#"
+            SELECT jsonb_validation_errors_detailed(
+                '{
+                    "type":"object",
+                    "properties":{
+                        "foo":{
+                            "type":"object",
+                            "properties":{
+                                "bar":{
+                                    "type":"object",
+                                    "properties":{
+                                        "baz":{"type":"string"}
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }'::jsonschema,
+                '{"foo":{"bar":{"baz":42}}}'::jsonb
+            )
+            "#,
+        )
+        .unwrap()
+        .unwrap();
+
+        let arr = result.0.as_array().unwrap();
+        assert_eq!(arr.len(), 1);
+        assert_eq!(arr[0]["fieldPath"], "foo.bar.baz");
+        assert_eq!(arr[0]["message"], "42 is not of type \"string\"");
+    }
+
+    #[pg_test]
+    fn test_jsonb_validation_errors_detailed_array_index() {
+        let result = Spi::get_one::<pgrx::JsonB>(
+            r#"
+            SELECT jsonb_validation_errors_detailed(
+                '{
+                    "type":"object",
+                    "properties":{
+                        "tags":{
+                            "type":"array",
+                            "items":{"type":"string"}
+                        }
+                    }
+                }'::jsonschema,
+                '{"tags":["ok",42,"alsook"]}'::jsonb
+            )
+            "#,
+        )
+        .unwrap()
+        .unwrap();
+
+        let arr = result.0.as_array().unwrap();
+        assert_eq!(arr.len(), 1);
+        assert_eq!(arr[0]["fieldPath"], "tags.1");
+    }
+
+    #[pg_test]
+    fn test_jsonb_validation_errors_detailed_no_errors() {
+        let result = Spi::get_one::<pgrx::JsonB>(
+            r#"
+            SELECT jsonb_validation_errors_detailed(
+                '{"type":"object","properties":{"foo":{"type":"string"}}}'::jsonschema,
+                '{"foo":"bar"}'::jsonb
+            )
+            "#,
+        )
+        .unwrap()
+        .unwrap();
+
+        let arr = result.0.as_array().unwrap();
+        assert!(arr.is_empty());
+    }
+
+    #[pg_test]
+    fn test_jsonb_validation_errors_detailed_required_at_root() {
+        let result = Spi::get_one::<pgrx::JsonB>(
+            r#"
+            SELECT jsonb_validation_errors_detailed(
+                '{"type":"object","required":["name"]}'::jsonschema,
+                '{}'::jsonb
+            )
+            "#,
+        )
+        .unwrap()
+        .unwrap();
+
+        let arr = result.0.as_array().unwrap();
+        assert_eq!(arr.len(), 1);
+        assert_eq!(arr[0]["fieldPath"], "name");
+    }
+
+    #[pg_test]
+    fn test_jsonb_validation_errors_detailed_required_nested() {
+        let result = Spi::get_one::<pgrx::JsonB>(
+            r#"
+            SELECT jsonb_validation_errors_detailed(
+                '{
+                    "type":"object",
+                    "properties":{
+                        "foo":{
+                            "type":"object",
+                            "properties":{
+                                "bar":{
+                                    "type":"object",
+                                    "required":["name"]
+                                }
+                            }
+                        }
+                    }
+                }'::jsonschema,
+                '{"foo":{"bar":{}}}'::jsonb
+            )
+            "#,
+        )
+        .unwrap()
+        .unwrap();
+
+        let arr = result.0.as_array().unwrap();
+        assert_eq!(arr.len(), 1);
+        assert_eq!(arr[0]["fieldPath"], "foo.bar.name");
+    }
+
+    #[pg_test]
+    fn test_jsonb_validation_errors_detailed_root_path() {
+        let result = Spi::get_one::<pgrx::JsonB>(
+            r#"
+            SELECT jsonb_validation_errors_detailed(
+                '{"type":"object"}'::jsonschema,
+                '42'::jsonb
+            )
+            "#,
+        )
+        .unwrap()
+        .unwrap();
+
+        let arr = result.0.as_array().unwrap();
+        assert_eq!(arr.len(), 1);
+        assert_eq!(arr[0]["fieldPath"], "");
+    }
+
+    #[pg_test]
+    fn test_jsonb_validation_errors_detailed_additional_property_at_root() {
+        let result = Spi::get_one::<pgrx::JsonB>(
+            r#"
+            SELECT jsonb_validation_errors_detailed(
+                '{"type":"object","properties":{"foo":{"type":"string"}},"additionalProperties":false}'::jsonschema,
+                '{"foo":"ok","bar":"unexpected"}'::jsonb
+            )
+            "#,
+        )
+        .unwrap()
+        .unwrap();
+
+        let arr = result.0.as_array().unwrap();
+        assert_eq!(arr.len(), 1);
+        assert_eq!(arr[0]["fieldPath"], "bar");
+    }
+
+    #[pg_test]
+    fn test_jsonb_validation_errors_detailed_multiple() {
+        let result = Spi::get_one::<pgrx::JsonB>(
+            r#"
+            SELECT jsonb_validation_errors_detailed(
+                '{
+                    "type":"object",
+                    "properties":{
+                        "foo":{"type":"string"},
+                        "bar":{"type":"number"}
+                    }
+                }'::jsonschema,
+                '{"foo":1,"bar":[]}'::jsonb
+            )
+            "#,
+        )
+        .unwrap()
+        .unwrap();
+
+        let arr = result.0.as_array().unwrap();
+        assert_eq!(arr.len(), 2);
+        let mut paths: Vec<&str> =
+            arr.iter().map(|e| e["fieldPath"].as_str().unwrap()).collect();
+        paths.sort_unstable();
+        assert_eq!(paths, vec!["bar", "foo"]);
+    }
+
+    #[pg_test]
+    fn test_jsonb_validation_errors_detailed_failed_constraint_pattern() {
+        let result = Spi::get_one::<pgrx::JsonB>(
+            r#"
+            SELECT jsonb_validation_errors_detailed(
+                '{"type":"object","properties":{"foo":{"type":"string","pattern":"^[a-z]+$"}}}'::jsonschema,
+                '{"foo":"ABC"}'::jsonb
+            )
+            "#,
+        )
+        .unwrap()
+        .unwrap();
+
+        let arr = result.0.as_array().unwrap();
+        assert_eq!(arr.len(), 1);
+        assert_eq!(arr[0]["fieldPath"], "foo");
+        assert_eq!(arr[0]["failedConstraint"], "pattern");
+    }
+
+    #[pg_test]
+    fn test_jsonb_validation_errors_detailed_failed_constraint_required() {
+        let result = Spi::get_one::<pgrx::JsonB>(
+            r#"
+            SELECT jsonb_validation_errors_detailed(
+                '{"type":"object","required":["name"]}'::jsonschema,
+                '{}'::jsonb
+            )
+            "#,
+        )
+        .unwrap()
+        .unwrap();
+
+        let arr = result.0.as_array().unwrap();
+        assert_eq!(arr.len(), 1);
+        assert_eq!(arr[0]["failedConstraint"], "required");
+    }
+
+    #[pg_test]
+    fn test_jsonb_validation_errors_detailed_failed_constraint_type() {
+        let result = Spi::get_one::<pgrx::JsonB>(
+            r#"
+            SELECT jsonb_validation_errors_detailed(
+                '{"type":"object","properties":{"foo":{"type":"string"}}}'::jsonschema,
+                '{"foo":42}'::jsonb
+            )
+            "#,
+        )
+        .unwrap()
+        .unwrap();
+
+        let arr = result.0.as_array().unwrap();
+        assert_eq!(arr.len(), 1);
+        assert_eq!(arr[0]["failedConstraint"], "type");
+    }
+
+    #[pg_test]
+    fn test_jsonb_validation_errors_detailed_pattern_error_inline() {
+        // patternError is a sibling of pattern in the same subschema; we surface it.
+        let result = Spi::get_one::<pgrx::JsonB>(
+            r#"
+            SELECT jsonb_validation_errors_detailed(
+                '{
+                    "type":"object",
+                    "properties":{
+                        "foo":{
+                            "type":"string",
+                            "pattern":"^[a-z]+$",
+                            "patternError":"Must be lowercase letters"
+                        }
+                    }
+                }'::jsonschema,
+                '{"foo":"ABC"}'::jsonb
+            )
+            "#,
+        )
+        .unwrap()
+        .unwrap();
+
+        let arr = result.0.as_array().unwrap();
+        assert_eq!(arr.len(), 1);
+        assert_eq!(arr[0]["fieldPath"], "foo");
+        assert_eq!(arr[0]["failedConstraint"], "pattern");
+        assert_eq!(arr[0]["patternError"], "Must be lowercase letters");
+    }
+
+    #[pg_test]
+    fn test_jsonb_validation_errors_detailed_pattern_error_via_ref() {
+        let result = Spi::get_one::<pgrx::JsonB>(
+            r##"
+            SELECT jsonb_validation_errors_detailed(
+                '{
+                    "type":"object",
+                    "properties":{
+                        "foo":{"$ref":"#/definitions/letters"}
+                    },
+                    "definitions":{
+                        "letters":{
+                            "type":"string",
+                            "pattern":"^[a-z]+$",
+                            "patternError":"Must be lowercase letters"
+                        }
+                    }
+                }'::jsonschema,
+                '{"foo":"ABC"}'::jsonb
+            )
+            "##,
+        )
+        .unwrap()
+        .unwrap();
+
+        let arr = result.0.as_array().unwrap();
+        assert_eq!(arr.len(), 1);
+        assert_eq!(arr[0]["fieldPath"], "foo");
+        assert_eq!(arr[0]["failedConstraint"], "pattern");
+        assert_eq!(arr[0]["patternError"], "Must be lowercase letters");
+    }
+
+    #[pg_test]
+    fn test_jsonb_validation_errors_detailed_pattern_error_absent_when_undefined() {
+        // Pattern fails but the schema has no patternError sibling — the key is
+        // omitted from the result (not present as null or empty string).
+        let result = Spi::get_one::<pgrx::JsonB>(
+            r#"
+            SELECT jsonb_validation_errors_detailed(
+                '{"type":"object","properties":{"foo":{"type":"string","pattern":"^[a-z]+$"}}}'::jsonschema,
+                '{"foo":"ABC"}'::jsonb
+            )
+            "#,
+        )
+        .unwrap()
+        .unwrap();
+
+        let arr = result.0.as_array().unwrap();
+        assert_eq!(arr.len(), 1);
+        let obj = arr[0].as_object().unwrap();
+        assert!(!obj.contains_key("patternError"));
+    }
+
+    #[pg_test]
+    fn test_jsonb_validation_errors_detailed_pattern_error_absent_for_non_pattern() {
+        // patternError exists in the schema but the failure isn't pattern-related
+        // (it's a type mismatch). patternError must not be included.
+        let result = Spi::get_one::<pgrx::JsonB>(
+            r#"
+            SELECT jsonb_validation_errors_detailed(
+                '{
+                    "type":"object",
+                    "properties":{
+                        "foo":{
+                            "type":"string",
+                            "pattern":"^[a-z]+$",
+                            "patternError":"Must be lowercase letters"
+                        }
+                    }
+                }'::jsonschema,
+                '{"foo":42}'::jsonb
+            )
+            "#,
+        )
+        .unwrap()
+        .unwrap();
+
+        let arr = result.0.as_array().unwrap();
+        assert_eq!(arr.len(), 1);
+        let obj = arr[0].as_object().unwrap();
+        assert_eq!(obj["failedConstraint"], "type");
+        assert!(!obj.contains_key("patternError"));
     }
 
     #[pg_test]

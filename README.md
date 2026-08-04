@@ -24,6 +24,7 @@ This extension exposes the following four SQL functions:
 - jsonb_matches_schema (note the **jsonb** in front)
 - jsonschema_is_valid
 - jsonschema_validation_errors
+- jsonb_validation_errors_detailed
 
 With the following signatures
 
@@ -51,6 +52,13 @@ and
 ```sql
 -- Returns an array of errors if a *schema* is invalid
 jsonschema_validation_errors(schema json, instance json) returns text[]
+```
+
+and
+
+```sql
+-- Returns an array of errors if a *schema* is invalid
+jsonb_validation_errors_detailed(schema jsonschema, instance jsonb) returns jsonb
 ```
 
 ### Compiled schema type
