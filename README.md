@@ -210,9 +210,9 @@ The release process is composed of smaller scripts that can also be run independ
 
 #### System
 
-- 2024 MacBook Pro M4 Max (64GB)
-- macOS 26.3.1
-- PostgreSQL 16.13
+- AMD Ryzen 9 9950X (64GB)
+- Arch Linux, kernel 7.0.9
+- PostgreSQL 17.2
 
 ### Setup
 
@@ -247,10 +247,10 @@ select
     )
 from
     generate_series(1, 20000) t(i);
--- Query Completed in 195 ms
+-- Query Completed in 75 ms
 ```
 
-for comparison, the equivalent test using postgres-json-schema's `validate_json_schema` function ran in 2.0 seconds. pg_jsonschema's ~10x speedup on this example JSON schema grows quickly as the schema becomes more complex.
+for comparison, the equivalent test using postgres-json-schema's `validate_json_schema` function ran in 245 ms. pg_jsonschema's ~3.3x speedup on this example JSON schema grows quickly as the schema becomes more complex.
 
 ### Compiled schema type
 
@@ -258,7 +258,7 @@ Using the same schema and 20k inserts:
 
 | Method | 20k inserts |
 | ------ | ----------- |
-| `jsonb_matches_schema` — recompiles every row | ~195 ms |
-| `jsonb_matches_compiled_schema` — compiled once, cached | ~110 ms |
+| `jsonb_matches_schema` — recompiles every row | ~75 ms |
+| `jsonb_matches_compiled_schema` — compiled once, cached | ~19 ms |
 
-~1.8x speedup; the gain grows with schema complexity since compilation cost is paid only once per callsite.
+~4x speedup; the gain grows with schema complexity since compilation cost is paid only once per callsite.

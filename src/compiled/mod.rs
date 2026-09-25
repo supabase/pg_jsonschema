@@ -36,7 +36,9 @@ impl JsonSchema {
     pub(crate) fn compile(value: Value) -> Self {
         let canonical = jsonschema::canonical::json::to_string(&value)
             .unwrap_or_else(|err| pgrx::error!("failed to canonicalize JSON schema: {err}"));
-        cache::get_or_insert(&canonical, || compile_impl(&value, "invalid JSON schema"));
+        cache::get_or_insert::<jsonschema::json::SerdeJson>(&canonical, || {
+            compile_impl(&value, "invalid JSON schema")
+        });
         Self { value: canonical }
     }
 }
@@ -53,14 +55,20 @@ impl pgrx::inoutfuncs::InOutFuncs for JsonSchema {
     }
 }
 
-fn compile_impl(value: &Value, error_prefix: &str) -> Arc<jsonschema::Validator> {
+fn compile_impl<F: jsonschema::json::Json>(
+    value: &Value,
+    error_prefix: &str,
+) -> Arc<jsonschema::Validator<F>> {
     Arc::new(
-        jsonschema::validator_for(value)
+        jsonschema::options_for::<F>()
+            .build(value)
             .unwrap_or_else(|err| pgrx::error!("{error_prefix}: {err}")),
     )
 }
 
-pub(super) fn compile_from_str(schema: &str) -> Arc<jsonschema::Validator> {
+pub(super) fn compile_from_str<F: jsonschema::json::Json>(
+    schema: &str,
+) -> Arc<jsonschema::Validator<F>> {
     let value: Value = serde_json::from_str(schema)
         .unwrap_or_else(|err| pgrx::error!("internal: failed to parse canonical schema: {err}"));
     compile_impl(&value, "internal: failed to compile schema")
