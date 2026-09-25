@@ -1,3 +1,4 @@
+mod arg;
 mod cache;
 mod callsite;
 
@@ -6,6 +7,7 @@ use std::{ffi::CStr, sync::Arc};
 use pgrx::*;
 use serde_json::Value;
 
+pub(crate) use arg::SchemaArg;
 pub(crate) use callsite::fn_extra_get_or_compile;
 
 /// JSON schema is stored as its canonical JSON string.

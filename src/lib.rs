@@ -2,7 +2,7 @@ mod compiled;
 
 use pgrx::*;
 
-use compiled::{JsonSchema, fn_extra_get_or_compile};
+use compiled::{JsonSchema, SchemaArg, fn_extra_get_or_compile};
 
 pg_module_magic!();
 
@@ -61,9 +61,9 @@ pgrx::extension_sql!(
     requires = [jsonschema_from_json, jsonschema_from_jsonb],
 );
 
-#[pg_extern(immutable, strict, parallel_safe)]
+#[pg_extern(immutable, strict, parallel_safe, requires = [JsonSchema])]
 fn json_matches_compiled_schema(
-    schema: JsonSchema,
+    schema: SchemaArg,
     instance: Json,
     fcinfo: pg_sys::FunctionCallInfo,
 ) -> bool {
@@ -71,9 +71,9 @@ fn json_matches_compiled_schema(
     validator.is_valid(&instance.0)
 }
 
-#[pg_extern(immutable, strict, parallel_safe)]
+#[pg_extern(immutable, strict, parallel_safe, requires = [JsonSchema])]
 fn jsonb_matches_compiled_schema(
-    schema: JsonSchema,
+    schema: SchemaArg,
     instance: pgrx::JsonB,
     fcinfo: pg_sys::FunctionCallInfo,
 ) -> bool {
@@ -81,9 +81,9 @@ fn jsonb_matches_compiled_schema(
     validator.is_valid(&instance.0)
 }
 
-#[pg_extern(immutable, strict, parallel_safe)]
+#[pg_extern(immutable, strict, parallel_safe, requires = [JsonSchema])]
 fn json_validation_errors_compiled(
-    schema: JsonSchema,
+    schema: SchemaArg,
     instance: Json,
     fcinfo: pg_sys::FunctionCallInfo,
 ) -> Vec<String> {
@@ -94,9 +94,9 @@ fn json_validation_errors_compiled(
         .collect()
 }
 
-#[pg_extern(immutable, strict, parallel_safe)]
+#[pg_extern(immutable, strict, parallel_safe, requires = [JsonSchema])]
 fn jsonb_validation_errors_compiled(
-    schema: JsonSchema,
+    schema: SchemaArg,
     instance: pgrx::JsonB,
     fcinfo: pg_sys::FunctionCallInfo,
 ) -> Vec<String> {
@@ -363,6 +363,31 @@ mod tests {
             "#,
         )
         .unwrap();
+    }
+
+    // Schemas from a column arrive as TOAST pointers; each row's pointer picks its own schema.
+    #[pg_test]
+    fn test_callsite_cache_toasted_schema_column() {
+        Spi::run(
+            r#"
+            CREATE TEMP TABLE big_schemas(s jsonschema);
+            ALTER TABLE big_schemas ALTER COLUMN s SET STORAGE EXTERNAL;
+            INSERT INTO big_schemas VALUES
+                (('{"type":"string","description":"' || repeat('x', 100000) || '"}')::jsonschema),
+                (('{"type":"integer","description":"' || repeat('y', 100000) || '"}')::jsonschema);
+            "#,
+        )
+        .unwrap();
+        let result = Spi::get_one::<i64>(
+            r#"
+            SELECT count(*)
+            FROM big_schemas, (VALUES ('"a"'::jsonb), ('1'::jsonb), ('"b"'::jsonb)) AS v(doc)
+            WHERE jsonb_matches_compiled_schema(s, doc)
+            "#,
+        )
+        .unwrap()
+        .unwrap();
+        assert_eq!(result, 3);
     }
 
     #[pg_test]
