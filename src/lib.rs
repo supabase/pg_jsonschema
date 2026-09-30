@@ -113,72 +113,96 @@ mod tests {
     use pgrx::*;
     use serde_json::json;
 
-    macro_rules! compiled_schema_tests {
-        (json { $($name:ident: $schema:literal, $instance:literal => $expected:literal)* }) => {$(
-            #[pg_test]
-            fn $name() {
-                let result = Spi::get_one::<bool>(concat!(
-                    "SELECT json_matches_compiled_schema('", $schema, "'::jsonschema, '", $instance, "'::json)"
-                )).unwrap().unwrap();
-                assert_eq!(result, $expected);
-            }
-        )*};
-        (jsonb { $($name:ident: $schema:literal, $instance:literal => $expected:literal)* }) => {$(
-            #[pg_test]
-            fn $name() {
-                let result = Spi::get_one::<bool>(concat!(
-                    "SELECT jsonb_matches_compiled_schema('", $schema, "'::jsonschema, '", $instance, "'::jsonb)"
-                )).unwrap().unwrap();
-                assert_eq!(result, $expected);
-            }
-        )*};
-        (errors_json { $($name:ident: $schema:literal, $instance:literal => [$($err:literal),*])* }) => {$(
-            #[pg_test]
-            fn $name() {
-                let errors = Spi::get_one::<Vec<String>>(concat!(
-                    "SELECT json_validation_errors_compiled('", $schema, "'::jsonschema, '",
-                    $instance, "'::json)"
-                )).unwrap().unwrap();
-                assert_eq!(errors, [$($err),*]);
-            }
-        )*};
-        (errors_jsonb { $($name:ident: $schema:literal, $instance:literal => [$($err:literal),*])* }) => {$(
-            #[pg_test]
-            fn $name() {
-                let errors = Spi::get_one::<Vec<String>>(concat!(
-                    "SELECT jsonb_validation_errors_compiled('", $schema, "'::jsonschema, '",
-                    $instance, "'::jsonb)"
-                )).unwrap().unwrap();
-                assert_eq!(errors, [$($err),*]);
-            }
-        )*};
+    fn call_json_matches_compiled_schema(schema: &str, instance: &str, expected: bool) {
+        let result = Spi::get_one::<bool>(&format!(
+            "select json_matches_compiled_schema('{schema}'::jsonschema, '{instance}'::json)"
+        ))
+        .unwrap()
+        .unwrap();
+        assert_eq!(result, expected);
     }
 
-    compiled_schema_tests!(json {
-        test_json_matches_compiled_schema: r#"{"type":"string"}"#, r#""hello""# => true
-        test_json_rejects_compiled_schema: r#"{"type":"string"}"#, r#"42"#      => false
-    });
+    fn call_jsonb_matches_compiled_schema(schema: &str, instance: &str, expected: bool) {
+        let result = Spi::get_one::<bool>(&format!(
+            "select jsonb_matches_compiled_schema('{schema}'::jsonschema, '{instance}'::jsonb)"
+        ))
+        .unwrap()
+        .unwrap();
+        assert_eq!(result, expected);
+    }
 
-    compiled_schema_tests!(jsonb {
-        test_jsonb_matches_compiled_schema: r#"{"type":"string"}"#, r#""hello""# => true
-        test_jsonb_rejects_compiled_schema: r#"{"type":"string"}"#, r#"42"#      => false
-    });
+    fn call_json_validation_errors_compiled(
+        schema: &str,
+        instance: &str,
+        expected_errors: &[&str],
+    ) {
+        let errors = Spi::get_one::<Vec<String>>(&format!(
+            "select json_validation_errors_compiled('{schema}'::jsonschema, '{instance}'::json)"
+        ))
+        .unwrap()
+        .unwrap();
+        assert_eq!(errors, expected_errors);
+    }
 
-    compiled_schema_tests!(errors_json {
-        test_validation_errors_compiled_with_error:
-            r#"{"maxLength":4}"#, r#""toolong""#
-            => [r#""toolong" is longer than 4 characters"#]
-    });
+    fn call_jsonb_validation_errors_compiled(
+        schema: &str,
+        instance: &str,
+        expected_errors: &[&str],
+    ) {
+        let errors = Spi::get_one::<Vec<String>>(&format!(
+            "select jsonb_validation_errors_compiled('{schema}'::jsonschema, '{instance}'::jsonb)"
+        ))
+        .unwrap()
+        .unwrap();
+        assert_eq!(errors, expected_errors);
+    }
 
-    compiled_schema_tests!(errors_jsonb {
-        test_validation_errors_compiled_jsonb:
-            r#"{"type":"string"}"#, r#"42"#
-            => ["42 is not of type \"string\""]
-        test_validation_errors_compiled_jsonb_object:
+    #[pg_test]
+    fn test_json_matches_compiled_schema() {
+        call_json_matches_compiled_schema(r#"{"type":"string"}"#, r#""hello""#, true);
+    }
+
+    #[pg_test]
+    fn test_json_rejects_compiled_schema() {
+        call_json_matches_compiled_schema(r#"{"type":"string"}"#, r#"42"#, false);
+    }
+
+    #[pg_test]
+    fn test_jsonb_matches_compiled_schema() {
+        call_jsonb_matches_compiled_schema(r#"{"type":"string"}"#, r#""hello""#, true);
+    }
+
+    #[pg_test]
+    fn test_jsonb_rejects_compiled_schema() {
+        call_jsonb_matches_compiled_schema(r#"{"type":"string"}"#, r#"42"#, false);
+    }
+
+    #[pg_test]
+    fn test_validation_errors_compiled_with_error() {
+        call_json_validation_errors_compiled(
+            r#"{"maxLength":4}"#,
+            r#""toolong""#,
+            &[r#""toolong" is longer than 4 characters"#],
+        );
+    }
+
+    #[pg_test]
+    fn test_validation_errors_compiled_jsonb() {
+        call_jsonb_validation_errors_compiled(
+            r#"{"type":"string"}"#,
+            r#"42"#,
+            &["42 is not of type \"string\""],
+        );
+    }
+
+    #[pg_test]
+    fn test_validation_errors_compiled_jsonb_object() {
+        call_jsonb_validation_errors_compiled(
             r#"{"type":"object","required":["name"],"properties":{"name":{"type":"string"}}}"#,
-            r#"{"name":42}"#
-            => ["42 is not of type \"string\""]
-    });
+            r#"{"name":42}"#,
+            &["42 is not of type \"string\""],
+        );
+    }
 
     #[pg_test]
     fn test_jsonschema_cast_from_json() {
