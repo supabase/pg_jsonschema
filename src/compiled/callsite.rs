@@ -2,28 +2,33 @@ use std::sync::Arc;
 
 use pgrx::*;
 
-use super::{SchemaArg, cache, compile_from_str};
+use super::{
+    SchemaArg,
+    cache::{self, Cached},
+    compile_from_str,
+};
 
-fn get_or_compile(schema: &str) -> Arc<jsonschema::Validator> {
+fn get_or_compile<F: Cached>(schema: &str) -> Arc<jsonschema::Validator<F>> {
     cache::get_or_insert(schema, || compile_from_str(schema))
 }
 
-/// Per-callsite validator cache in `fcinfo->flinfo->fn_extra`.
-struct FnExtraCache {
+/// Per-callsite validator cache in `fcinfo->flinfo->fn_extra`. Each function reads one
+/// representation, so a slot only ever holds one `F`.
+struct FnExtraCache<F: Cached> {
     /// The schema datum as stored, compared before anything is detoasted or decoded.
     stored: Vec<u8>,
-    validator: Arc<jsonschema::Validator>,
+    validator: Arc<jsonschema::Validator<F>>,
     info: *mut pg_sys::FmgrInfo,
     const_schema_arg: bool,
     /// MemoryContextCallback; fires `drop_fn_extra_cache` when fn_mcxt is reset.
     callback: pg_sys::MemoryContextCallback,
 }
 
-unsafe extern "C-unwind" fn drop_fn_extra_cache(arg: *mut std::ffi::c_void) {
+unsafe extern "C-unwind" fn drop_fn_extra_cache<F: Cached>(arg: *mut std::ffi::c_void) {
     // PG calls callbacks before freeing memory, so `entry` and `(*entry).flinfo` are
     // still valid. Null fn_extra first so any re-entrant drop sees a clean slate.
     unsafe {
-        let entry = arg as *mut FnExtraCache;
+        let entry = arg as *mut FnExtraCache<F>;
         (*(*entry).info).fn_extra = std::ptr::null_mut();
         std::ptr::drop_in_place(entry);
     }
@@ -61,14 +66,14 @@ unsafe fn schema_arg_is_const(flinfo: *mut pg_sys::FmgrInfo) -> bool {
 ///
 /// # Safety
 /// `fcinfo` must be a valid, non-null `FunctionCallInfo` for the current call.
-pub(crate) unsafe fn fn_extra_get_or_compile(
+pub(crate) unsafe fn fn_extra_get_or_compile<F: Cached>(
     schema: &SchemaArg,
     fcinfo: pg_sys::FunctionCallInfo,
-) -> Arc<jsonschema::Validator> {
+) -> Arc<jsonschema::Validator<F>> {
     unsafe {
         let flinfo = (*fcinfo).flinfo;
         let cached_ptr = if !(*flinfo).fn_extra.is_null() {
-            Some((*flinfo).fn_extra as *mut FnExtraCache)
+            Some((*flinfo).fn_extra as *mut FnExtraCache<F>)
         } else {
             None
         };
@@ -96,7 +101,7 @@ pub(crate) unsafe fn fn_extra_get_or_compile(
                     info: flinfo,
                     const_schema_arg,
                     callback: pg_sys::MemoryContextCallback {
-                        func: Some(drop_fn_extra_cache),
+                        func: Some(drop_fn_extra_cache::<F>),
                         arg: cached_ptr as *mut std::ffi::c_void,
                         next,
                     },
@@ -111,7 +116,8 @@ pub(crate) unsafe fn fn_extra_get_or_compile(
         let fn_mcxt = (*flinfo).fn_mcxt;
         let old_mcxt = pg_sys::MemoryContextSwitchTo(fn_mcxt);
 
-        let cache_ptr = pg_sys::palloc(std::mem::size_of::<FnExtraCache>()) as *mut FnExtraCache;
+        let cache_ptr =
+            pg_sys::palloc(std::mem::size_of::<FnExtraCache<F>>()) as *mut FnExtraCache<F>;
         std::ptr::write(
             cache_ptr,
             FnExtraCache {
@@ -120,7 +126,7 @@ pub(crate) unsafe fn fn_extra_get_or_compile(
                 info: flinfo,
                 const_schema_arg,
                 callback: pg_sys::MemoryContextCallback {
-                    func: Some(drop_fn_extra_cache),
+                    func: Some(drop_fn_extra_cache::<F>),
                     arg: cache_ptr as *mut std::ffi::c_void,
                     next: std::ptr::null_mut(),
                 },

@@ -1,8 +1,14 @@
 mod compiled;
+mod raw;
 
+use jsonschema::{
+    Validator,
+    json::{Jsonb, SerdeJson, jsonb::take_pending_error},
+};
 use pgrx::*;
 
 use compiled::{JsonSchema, SchemaArg, fn_extra_get_or_compile};
+use raw::RawJsonb;
 
 pg_module_magic!();
 
@@ -12,8 +18,24 @@ fn json_matches_schema(schema: Json, instance: Json) -> bool {
 }
 
 #[pg_extern(immutable, strict, parallel_safe)]
-fn jsonb_matches_schema(schema: Json, instance: JsonB) -> bool {
-    jsonschema::is_valid(&schema.0, &instance.0)
+fn jsonb_matches_schema(schema: Json, instance: RawJsonb) -> bool {
+    jsonschema::options_for::<Jsonb>()
+        .build(&schema.0)
+        .unwrap_or_else(|err| error!("invalid JSON schema: {err}"))
+        .is_valid(Jsonb::root(instance.as_bytes()))
+}
+
+// Reporting a `jsonb` instance rebuilds it as a `serde_json::Value`, which stops at a fixed depth
+// and records why instead.
+fn jsonb_errors(validator: &Validator<Jsonb>, instance: &RawJsonb) -> Vec<String> {
+    let errors = validator
+        .iter_errors(Jsonb::root(instance.as_bytes()))
+        .map(|err| err.to_string())
+        .collect();
+    if let Some(message) = take_pending_error() {
+        error!("{message}");
+    }
+    errors
 }
 
 #[pg_extern(immutable, strict, parallel_safe)]
@@ -67,18 +89,18 @@ fn json_matches_compiled_schema(
     instance: Json,
     fcinfo: pg_sys::FunctionCallInfo,
 ) -> bool {
-    let validator = unsafe { fn_extra_get_or_compile(&schema, fcinfo) };
+    let validator = unsafe { fn_extra_get_or_compile::<SerdeJson>(&schema, fcinfo) };
     validator.is_valid(&instance.0)
 }
 
 #[pg_extern(immutable, strict, parallel_safe, requires = [JsonSchema])]
 fn jsonb_matches_compiled_schema(
     schema: SchemaArg,
-    instance: pgrx::JsonB,
+    instance: RawJsonb,
     fcinfo: pg_sys::FunctionCallInfo,
 ) -> bool {
-    let validator = unsafe { fn_extra_get_or_compile(&schema, fcinfo) };
-    validator.is_valid(&instance.0)
+    let validator = unsafe { fn_extra_get_or_compile::<Jsonb>(&schema, fcinfo) };
+    validator.is_valid(Jsonb::root(instance.as_bytes()))
 }
 
 #[pg_extern(immutable, strict, parallel_safe, requires = [JsonSchema])]
@@ -87,7 +109,7 @@ fn json_validation_errors_compiled(
     instance: Json,
     fcinfo: pg_sys::FunctionCallInfo,
 ) -> Vec<String> {
-    let validator = unsafe { fn_extra_get_or_compile(&schema, fcinfo) };
+    let validator = unsafe { fn_extra_get_or_compile::<SerdeJson>(&schema, fcinfo) };
     validator
         .iter_errors(&instance.0)
         .map(|err| err.to_string())
@@ -97,14 +119,11 @@ fn json_validation_errors_compiled(
 #[pg_extern(immutable, strict, parallel_safe, requires = [JsonSchema])]
 fn jsonb_validation_errors_compiled(
     schema: SchemaArg,
-    instance: pgrx::JsonB,
+    instance: RawJsonb,
     fcinfo: pg_sys::FunctionCallInfo,
 ) -> Vec<String> {
-    let validator = unsafe { fn_extra_get_or_compile(&schema, fcinfo) };
-    validator
-        .iter_errors(&instance.0)
-        .map(|err| err.to_string())
-        .collect()
+    let validator = unsafe { fn_extra_get_or_compile::<Jsonb>(&schema, fcinfo) };
+    jsonb_errors(&validator, &instance)
 }
 
 #[pg_schema]
@@ -514,20 +533,22 @@ mod tests {
 
     #[pg_test]
     fn test_jsonb_matches_schema_rs() {
-        let max_length: i32 = 5;
-        assert!(crate::jsonb_matches_schema(
-            Json(json!({ "maxLength": max_length })),
-            JsonB(json!("foo")),
-        ));
+        let result = Spi::get_one::<bool>(
+            r#"SELECT jsonb_matches_schema('{"maxLength": 5}', '"foo"'::jsonb)"#,
+        )
+        .unwrap()
+        .unwrap();
+        assert!(result);
     }
 
     #[pg_test]
     fn test_jsonb_not_matches_schema_rs() {
-        let max_length: i32 = 5;
-        assert!(!crate::jsonb_matches_schema(
-            Json(json!({ "maxLength": max_length })),
-            JsonB(json!("foobar")),
-        ));
+        let result = Spi::get_one::<bool>(
+            r#"SELECT jsonb_matches_schema('{"maxLength": 5}', '"foobar"'::jsonb)"#,
+        )
+        .unwrap()
+        .unwrap();
+        assert!(!result);
     }
 
     #[pg_test]
@@ -644,6 +665,173 @@ mod tests {
         assert!(errors[0] == *"[] is not of type \"number\"");
         assert!(errors[1] == *"\"1\" is not of type \"boolean\"");
         assert!(errors[2] == *"1 is not of type \"string\"");
+    }
+    // The `jsonb` functions read the datum in place; the `json` ones parse text into
+    // `serde_json`. Both must give the same verdict.
+    fn assert_representations_agree(schema: &str, instance: &str, expected: bool) {
+        for function in [
+            "json_matches_schema('{s}', '{i}'::json)",
+            "jsonb_matches_schema('{s}', '{i}'::jsonb)",
+            "json_matches_compiled_schema('{s}'::jsonschema, '{i}'::json)",
+            "jsonb_matches_compiled_schema('{s}'::jsonschema, '{i}'::jsonb)",
+        ] {
+            let query = format!(
+                "SELECT {}",
+                function.replace("{s}", schema).replace("{i}", instance)
+            );
+            let result = Spi::get_one::<bool>(&query).unwrap().unwrap();
+            assert_eq!(result, expected, "{query}");
+        }
+    }
+
+    #[pg_test]
+    fn test_agree_string() {
+        assert_representations_agree(r#"{"type":"string"}"#, r#""hello""#, true);
+    }
+
+    #[pg_test]
+    fn test_agree_string_invalid() {
+        assert_representations_agree(r#"{"type":"string"}"#, r#"42"#, false);
+    }
+
+    #[pg_test]
+    fn test_agree_integer() {
+        assert_representations_agree(r#"{"type":"integer"}"#, r#"-17"#, true);
+    }
+
+    #[pg_test]
+    fn test_agree_integer_fraction() {
+        assert_representations_agree(r#"{"type":"integer"}"#, r#"1.5"#, false);
+    }
+
+    #[pg_test]
+    fn test_agree_number_large() {
+        assert_representations_agree(
+            r#"{"type":"integer"}"#,
+            r#"123456789012345678901234567890"#,
+            true,
+        );
+    }
+
+    #[pg_test]
+    fn test_agree_multiple_of() {
+        assert_representations_agree(r#"{"multipleOf":0.1}"#, r#"17.2"#, true);
+    }
+
+    #[pg_test]
+    fn test_agree_multiple_of_invalid() {
+        assert_representations_agree(r#"{"multipleOf":0.3}"#, r#"17.2"#, false);
+    }
+
+    #[pg_test]
+    fn test_agree_boolean() {
+        assert_representations_agree(r#"{"type":"boolean"}"#, r#"false"#, true);
+    }
+
+    #[pg_test]
+    fn test_agree_null() {
+        assert_representations_agree(r#"{"type":"null"}"#, r#"null"#, true);
+    }
+
+    #[pg_test]
+    fn test_agree_empty_array() {
+        assert_representations_agree(r#"{"type":"array","maxItems":0}"#, r#"[]"#, true);
+    }
+
+    #[pg_test]
+    fn test_agree_empty_object() {
+        assert_representations_agree(r#"{"type":"object","maxProperties":0}"#, r#"{}"#, true);
+    }
+
+    #[pg_test]
+    fn test_agree_unique_items() {
+        assert_representations_agree(r#"{"uniqueItems":true}"#, r#"[1, 1.0]"#, false);
+    }
+
+    #[pg_test]
+    fn test_agree_const() {
+        assert_representations_agree(
+            r#"{"const":{"a":[1,{"b":null}]}}"#,
+            r#"{"a":[1.0,{"b":null}]}"#,
+            true,
+        );
+    }
+
+    #[pg_test]
+    fn test_agree_astral_length() {
+        assert_representations_agree(r#"{"maxLength":1}"#, r#""😀😀""#, false);
+    }
+
+    #[pg_test]
+    fn test_agree_nested_invalid() {
+        assert_representations_agree(
+            r#"{"properties":{"items":{"items":{"required":["id"]}}}}"#,
+            r#"{"items":[{"id":1},{"name":"x"}]}"#,
+            false,
+        );
+    }
+
+    #[pg_test]
+    fn test_validation_errors_compiled_jsonb_many() {
+        call_jsonb_validation_errors_compiled(
+            r#"{"type":"object","required":["name"],"properties":{"age":{"type":"number"},"tags":{"uniqueItems":true}},"additionalProperties":false}"#,
+            r#"{"age":"x","tags":[1,1],"extra":{"deep":[1]}}"#,
+            &[
+                "\"x\" is not of type \"number\"",
+                "[1,1] has non-unique elements",
+                "Additional properties are not allowed ('extra' was unexpected)",
+                "\"name\" is a required property",
+            ],
+        );
+    }
+
+    // Stored out of line, so the datum reaches the function as a TOAST pointer.
+    #[pg_test]
+    fn test_jsonb_toasted_document() {
+        Spi::run(
+            r#"
+            CREATE TEMP TABLE toasted(doc jsonb);
+            ALTER TABLE toasted ALTER COLUMN doc SET STORAGE EXTERNAL;
+            INSERT INTO toasted
+            SELECT jsonb_build_object('data', string_agg(md5(i::text), ''))
+            FROM generate_series(1, 1000) i;
+            "#,
+        )
+        .unwrap();
+        let toast_size = Spi::get_one::<i64>(
+            "SELECT pg_relation_size(reltoastrelid) FROM pg_class WHERE oid = 'toasted'::regclass",
+        )
+        .unwrap()
+        .unwrap();
+        assert!(toast_size > 0);
+        let schema = r#"{"properties":{"data":{"type":"string","minLength":32000}}}"#;
+        for function in [
+            "jsonb_matches_schema('{s}', doc)",
+            "jsonb_matches_compiled_schema('{s}'::jsonschema, doc)",
+        ] {
+            let query = format!("SELECT {} FROM toasted", function.replace("{s}", schema));
+            assert!(Spi::get_one::<bool>(&query).unwrap().unwrap(), "{query}");
+        }
+    }
+
+    // Reporting an instance nested this deep is refused rather than overflowing the stack.
+    #[pg_test]
+    #[should_panic(expected = "maximum nesting depth")]
+    fn test_jsonb_validation_errors_deep_instance() {
+        Spi::run(
+            r#"SELECT jsonb_validation_errors_compiled('{"type":"string"}'::jsonschema, (repeat('[', 200) || repeat(']', 200))::jsonb)"#,
+        )
+        .unwrap();
+    }
+
+    #[pg_test]
+    fn test_jsonb_matches_deep_instance() {
+        let result = Spi::get_one::<bool>(
+            r#"SELECT jsonb_matches_compiled_schema('{"type":"array"}'::jsonschema, (repeat('[', 5000) || repeat(']', 5000))::jsonb)"#,
+        )
+        .unwrap()
+        .unwrap();
+        assert!(result);
     }
 }
 
