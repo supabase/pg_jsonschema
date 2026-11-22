@@ -3,18 +3,22 @@ mod raw;
 
 use jsonschema::{
     Validator,
-    json::{Jsonb, SerdeJson, jsonb::take_pending_error},
+    json::{JsonText, Jsonb, jsonb::take_pending_error},
 };
 use pgrx::*;
 
 use compiled::{JsonSchema, SchemaArg, fn_extra_get_or_compile};
-use raw::RawJsonb;
+use raw::{RawJson, RawJsonb};
 
 pg_module_magic!();
 
 #[pg_extern(immutable, strict, parallel_safe)]
-fn json_matches_schema(schema: Json, instance: Json) -> bool {
-    jsonschema::is_valid(&schema.0, &instance.0)
+fn json_matches_schema(schema: Json, instance: RawJson) -> bool {
+    let document = instance.parse();
+    jsonschema::options_for::<JsonText>()
+        .build(&schema.0)
+        .expect("Invalid schema")
+        .is_valid(document.root())
 }
 
 #[pg_extern(immutable, strict, parallel_safe)]
@@ -50,13 +54,14 @@ fn jsonschema_is_valid(schema: Json) -> bool {
 }
 
 #[pg_extern(immutable, strict, parallel_safe)]
-fn jsonschema_validation_errors(schema: Json, instance: Json) -> Vec<String> {
-    let validator = match jsonschema::validator_for(&schema.0) {
+fn jsonschema_validation_errors(schema: Json, instance: RawJson) -> Vec<String> {
+    let document = instance.parse();
+    let validator = match jsonschema::options_for::<JsonText>().build(&schema.0) {
         Ok(v) => v,
         Err(err) => return vec![err.to_string()],
     };
     validator
-        .iter_errors(&instance.0)
+        .iter_errors(document.root())
         .map(|err| err.to_string())
         .collect()
 }
@@ -86,11 +91,12 @@ pgrx::extension_sql!(
 #[pg_extern(immutable, strict, parallel_safe, requires = [JsonSchema])]
 fn json_matches_compiled_schema(
     schema: SchemaArg,
-    instance: Json,
+    instance: RawJson,
     fcinfo: pg_sys::FunctionCallInfo,
 ) -> bool {
-    let validator = unsafe { fn_extra_get_or_compile::<SerdeJson>(&schema, fcinfo) };
-    validator.is_valid(&instance.0)
+    let document = instance.parse();
+    let validator = unsafe { fn_extra_get_or_compile::<JsonText>(&schema, fcinfo) };
+    validator.is_valid(document.root())
 }
 
 #[pg_extern(immutable, strict, parallel_safe, requires = [JsonSchema])]
@@ -106,12 +112,13 @@ fn jsonb_matches_compiled_schema(
 #[pg_extern(immutable, strict, parallel_safe, requires = [JsonSchema])]
 fn json_validation_errors_compiled(
     schema: SchemaArg,
-    instance: Json,
+    instance: RawJson,
     fcinfo: pg_sys::FunctionCallInfo,
 ) -> Vec<String> {
-    let validator = unsafe { fn_extra_get_or_compile::<SerdeJson>(&schema, fcinfo) };
+    let document = instance.parse();
+    let validator = unsafe { fn_extra_get_or_compile::<JsonText>(&schema, fcinfo) };
     validator
-        .iter_errors(&instance.0)
+        .iter_errors(document.root())
         .map(|err| err.to_string())
         .collect()
 }
@@ -161,6 +168,22 @@ mod tests {
         .unwrap()
         .unwrap();
         assert_eq!(errors, expected_errors);
+    }
+
+    fn call_json_matches_schema(schema: &str, instance: &str) -> bool {
+        Spi::get_one::<bool>(&format!(
+            "SELECT json_matches_schema('{schema}', '{instance}')"
+        ))
+        .unwrap()
+        .unwrap()
+    }
+
+    fn call_jsonschema_validation_errors(schema: &str, instance: &str) -> Vec<String> {
+        Spi::get_one::<Vec<String>>(&format!(
+            "SELECT jsonschema_validation_errors('{schema}', '{instance}')"
+        ))
+        .unwrap()
+        .unwrap()
     }
 
     fn call_jsonb_validation_errors_compiled(
@@ -259,6 +282,7 @@ mod tests {
         assert!(errors.is_empty());
     }
 
+    // Errors for object members follow the document's key order.
     #[pg_test]
     fn test_validation_errors_compiled_multiple() {
         let errors = Spi::get_one::<Vec<String>>(
@@ -278,14 +302,12 @@ mod tests {
         )
         .unwrap()
         .unwrap();
-        let mut errors = errors;
-        errors.sort_unstable();
         assert_eq!(
             errors,
-            vec![
-                r#""1" is not of type "boolean""#.to_string(),
-                r#"1 is not of type "string""#.to_string(),
-                r#"[] is not of type "number""#.to_string(),
+            [
+                r#"1 is not of type "string""#,
+                r#"[] is not of type "number""#,
+                r#""1" is not of type "boolean""#,
             ]
         );
     }
@@ -490,44 +512,42 @@ mod tests {
 
     #[pg_test]
     fn test_jsonschema_validation_errors_invalid_schema() {
-        let errors = crate::jsonschema_validation_errors(
-            Json(json!({ "enum": 1 })),
-            Json(json!("anything")),
-        );
+        let errors = call_jsonschema_validation_errors(r#"{"enum": 1}"#, r#""anything""#);
         assert!(!errors.is_empty());
     }
 
     #[pg_test]
+    #[should_panic(expected = "Invalid schema: ")]
+    fn test_json_matches_schema_invalid_schema() {
+        Spi::run(r#"SELECT json_matches_schema('{"type": "obj"}', '1')"#).unwrap();
+    }
+
+    #[pg_test]
     fn test_json_matches_schema_rs() {
-        let max_length: i32 = 5;
-        assert!(crate::json_matches_schema(
-            Json(json!({ "maxLength": max_length })),
-            Json(json!("foo")),
-        ));
+        assert!(call_json_matches_schema(r#"{"maxLength": 5}"#, r#""foo""#));
     }
 
     #[pg_test]
     fn test_json_not_matches_schema_rs() {
-        let max_length: i32 = 5;
-        assert!(!crate::json_matches_schema(
-            Json(json!({ "maxLength": max_length })),
-            Json(json!("foobar")),
+        assert!(!call_json_matches_schema(
+            r#"{"maxLength": 5}"#,
+            r#""foobar""#
         ));
     }
 
     #[pg_test]
     fn test_json_matches_schema_arbitrary_precision() {
-        assert!(crate::json_matches_schema(
-            Json(json!({ "type": "number", "multipleOf": 0.1 })),
-            Json(json!(17.2)),
+        assert!(call_json_matches_schema(
+            r#"{"type": "number", "multipleOf": 0.1}"#,
+            "17.2"
         ));
-        assert!(crate::json_matches_schema(
-            Json(json!({ "type": "number", "multipleOf": 0.2 })),
-            Json(json!(17.2)),
+        assert!(call_json_matches_schema(
+            r#"{"type": "number", "multipleOf": 0.2}"#,
+            "17.2"
         ));
-        assert!(!crate::json_matches_schema(
-            Json(json!({ "type": "number", "multipleOf": 0.3 })),
-            Json(json!(17.2)),
+        assert!(!call_json_matches_schema(
+            r#"{"type": "number", "multipleOf": 0.3}"#,
+            "17.2"
         ));
     }
 
@@ -622,52 +642,41 @@ mod tests {
 
     #[pg_test]
     fn test_jsonschema_validation_errors_none() {
-        let errors = crate::jsonschema_validation_errors(
-            Json(json!({ "maxLength": 4 })),
-            Json(json!("foo")),
-        );
+        let errors = call_jsonschema_validation_errors(r#"{"maxLength": 4}"#, r#""foo""#);
         assert!(errors.is_empty());
     }
 
     #[pg_test]
     fn test_jsonschema_validation_erros_one() {
-        let errors = crate::jsonschema_validation_errors(
-            Json(json!({ "maxLength": 4 })),
-            Json(json!("123456789")),
-        );
-        assert!(errors.len() == 1);
-        assert!(errors[0] == *"\"123456789\" is longer than 4 characters");
+        let errors = call_jsonschema_validation_errors(r#"{"maxLength": 4}"#, r#""123456789""#);
+        assert_eq!(errors, [r#""123456789" is longer than 4 characters"#]);
     }
 
+    // Errors for object members follow the document's key order.
     #[pg_test]
     fn test_jsonschema_validation_errors_multiple() {
-        let errors = crate::jsonschema_validation_errors(
-            Json(json!(
-            {
+        let errors = call_jsonschema_validation_errors(
+            r#"{
                 "type": "object",
                 "properties": {
-                    "foo": {
-                        "type": "string"
-                    },
-                    "bar": {
-                        "type": "number"
-                    },
-                    "baz": {
-                        "type": "boolean"
-                    },
-                    "additionalProperties": false,
+                    "foo": {"type": "string"},
+                    "bar": {"type": "number"},
+                    "baz": {"type": "boolean"},
+                    "additionalProperties": false
                 }
-            })),
-            Json(json!({"foo": 1, "bar": [], "baz": "1"})),
+            }"#,
+            r#"{"foo": 1, "bar": [], "baz": "1"}"#,
         );
-
-        assert!(errors.len() == 3);
-        assert!(errors[0] == *"[] is not of type \"number\"");
-        assert!(errors[1] == *"\"1\" is not of type \"boolean\"");
-        assert!(errors[2] == *"1 is not of type \"string\"");
+        assert_eq!(
+            errors,
+            [
+                r#"1 is not of type "string""#,
+                r#"[] is not of type "number""#,
+                r#""1" is not of type "boolean""#,
+            ]
+        );
     }
-    // The `jsonb` functions read the datum in place; the `json` ones parse text into
-    // `serde_json`. Both must give the same verdict.
+    // Each function reads the instance in its own way; all must give the same verdict.
     fn assert_representations_agree(schema: &str, instance: &str, expected: bool) {
         for function in [
             "json_matches_schema('{s}', '{i}'::json)",
@@ -762,6 +771,16 @@ mod tests {
         assert_representations_agree(r#"{"maxLength":1}"#, r#""😀😀""#, false);
     }
 
+    // `json` keeps every occurrence of a key, `jsonb` the last one.
+    #[pg_test]
+    fn test_agree_repeated_key() {
+        assert_representations_agree(
+            r#"{"properties":{"a":{"type":"string"}}}"#,
+            r#"{"a":1,"a":"x"}"#,
+            true,
+        );
+    }
+
     #[pg_test]
     fn test_agree_nested_invalid() {
         assert_representations_agree(
@@ -777,41 +796,77 @@ mod tests {
             r#"{"type":"object","required":["name"],"properties":{"age":{"type":"number"},"tags":{"uniqueItems":true}},"additionalProperties":false}"#,
             r#"{"age":"x","tags":[1,1],"extra":{"deep":[1]}}"#,
             &[
+                "\"name\" is a required property",
                 "\"x\" is not of type \"number\"",
                 "[1,1] has non-unique elements",
                 "Additional properties are not allowed ('extra' was unexpected)",
-                "\"name\" is a required property",
             ],
         );
     }
 
-    // Stored out of line, so the datum reaches the function as a TOAST pointer.
+    // The large document is stored out of line, so it reaches the function as a TOAST pointer;
+    // the small one is stored with a 1-byte header.
     #[pg_test]
-    fn test_jsonb_toasted_document() {
+    fn test_stored_documents() {
         Spi::run(
             r#"
-            CREATE TEMP TABLE toasted(doc jsonb);
-            ALTER TABLE toasted ALTER COLUMN doc SET STORAGE EXTERNAL;
-            INSERT INTO toasted
-            SELECT jsonb_build_object('data', string_agg(md5(i::text), ''))
-            FROM generate_series(1, 1000) i;
+            CREATE TEMP TABLE stored(id int, doc jsonb, jdoc json);
+            ALTER TABLE stored
+                ALTER COLUMN doc SET STORAGE EXTERNAL,
+                ALTER COLUMN jdoc SET STORAGE EXTERNAL;
+            INSERT INTO stored
+            SELECT 1, large, large::json
+            FROM (
+                SELECT jsonb_build_object('data', string_agg(md5(i::text), '')) AS large
+                FROM generate_series(1, 1000) i
+            ) documents;
+            INSERT INTO stored VALUES (2, '{"data":"x"}', '{"data":"x"}');
             "#,
         )
         .unwrap();
         let toast_size = Spi::get_one::<i64>(
-            "SELECT pg_relation_size(reltoastrelid) FROM pg_class WHERE oid = 'toasted'::regclass",
+            "SELECT pg_relation_size(reltoastrelid) FROM pg_class WHERE oid = 'stored'::regclass",
         )
         .unwrap()
         .unwrap();
         assert!(toast_size > 0);
         let schema = r#"{"properties":{"data":{"type":"string","minLength":32000}}}"#;
         for function in [
+            "json_matches_schema('{s}', jdoc)",
             "jsonb_matches_schema('{s}', doc)",
+            "json_matches_compiled_schema('{s}'::jsonschema, jdoc)",
             "jsonb_matches_compiled_schema('{s}'::jsonschema, doc)",
         ] {
-            let query = format!("SELECT {} FROM toasted", function.replace("{s}", schema));
-            assert!(Spi::get_one::<bool>(&query).unwrap().unwrap(), "{query}");
+            let query = format!(
+                "SELECT array_agg({} ORDER BY id) FROM stored",
+                function.replace("{s}", schema)
+            );
+            let results = Spi::get_one::<Vec<bool>>(&query).unwrap().unwrap();
+            assert_eq!(results, [true, false], "{query}");
         }
+    }
+
+    // `json` stores text that `serde_json` rejects; validating it reports the parse error.
+    #[pg_test]
+    #[should_panic(
+        expected = r#"datum must refer to a valid json varlena: Error("recursion limit exceeded", line: 1, column: 128)"#
+    )]
+    fn test_json_matches_compiled_schema_deep_instance() {
+        Spi::run(
+            r#"SELECT json_matches_compiled_schema('{"type":"array"}'::jsonschema, (repeat('[', 200) || repeat(']', 200))::json)"#,
+        )
+        .unwrap();
+    }
+
+    #[pg_test]
+    #[should_panic(
+        expected = r#"datum must refer to a valid json varlena: Error("lone leading surrogate in hex escape", line: 1, column: 7)"#
+    )]
+    fn test_json_validation_errors_compiled_lone_surrogate() {
+        Spi::run(
+            r#"SELECT json_validation_errors_compiled('{"type":"number"}'::jsonschema, '"\udc00"'::json)"#,
+        )
+        .unwrap();
     }
 
     // Reporting an instance nested this deep is refused rather than overflowing the stack.

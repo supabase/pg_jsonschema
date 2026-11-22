@@ -10,7 +10,7 @@ use std::thread::LocalKey;
 
 use jsonschema::{
     Validator,
-    json::{Json, Jsonb, SerdeJson},
+    json::{Json, JsonText, Jsonb},
 };
 
 type Cache<F> = lru::LruCache<String, Arc<Validator<F>>>;
@@ -18,7 +18,7 @@ type Cache<F> = lru::LruCache<String, Arc<Validator<F>>>;
 const CAPACITY: NonZeroUsize = NonZeroUsize::new(128).expect("128 is non zero");
 
 thread_local! {
-    static SERDE_JSON: RefCell<Cache<SerdeJson>> = RefCell::new(lru::LruCache::new(CAPACITY));
+    static JSON_TEXT: RefCell<Cache<JsonText>> = RefCell::new(lru::LruCache::new(CAPACITY));
     static JSONB: RefCell<Cache<Jsonb>> = RefCell::new(lru::LruCache::new(CAPACITY));
 }
 
@@ -27,9 +27,9 @@ pub(crate) trait Cached: Json + Sized {
     fn cache() -> &'static LocalKey<RefCell<Cache<Self>>>;
 }
 
-impl Cached for SerdeJson {
+impl Cached for JsonText {
     fn cache() -> &'static LocalKey<RefCell<Cache<Self>>> {
-        &SERDE_JSON
+        &JSON_TEXT
     }
 }
 
