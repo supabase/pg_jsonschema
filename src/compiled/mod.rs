@@ -36,7 +36,7 @@ impl JsonSchema {
     pub(crate) fn compile(value: Value) -> Self {
         let canonical = jsonschema::canonical::json::to_string(&value)
             .unwrap_or_else(|err| pgrx::error!("failed to canonicalize JSON schema: {err}"));
-        cache::get_or_insert::<jsonschema::json::SerdeJson>(&canonical, || {
+        cache::get_or_insert::<jsonschema::json::JsonText>(&canonical, || {
             compile_impl(&value, "invalid JSON schema")
         });
         Self { value: canonical }

@@ -20,9 +20,10 @@ pg_test = []
 pgrx = "0.19.2"
 serde = "1.0"
 serde_json = "1.0"
-jsonschema = { version = "0.58.0", default-features = false, features = [
+jsonschema = { version = "0.63.0", default-features = false, features = [
     "arbitrary-precision",
     "jsonb",
+    "json-text",
 ] }
 lru = { version = "0.16", default-features = false }
 
